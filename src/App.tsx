@@ -15,7 +15,9 @@ import {
   ChevronRight,
   Sparkles,
   Search,
-  Code
+  Code,
+  X,
+  ArrowLeft
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -57,6 +59,8 @@ For each concept provide:
 - RISK REASON: Provide a detailed explanation of the potential negative implications, brand safety concerns, or execution challenges associated with this specific idea. Avoid generic statements.
 - PRODUCIBILITY: Can this be made with AI tools + minimal budget? How?
 - AI VISUAL PROMPT: A highly detailed, professional prompt for an AI image generator (like Midjourney or DALL-E) that would perfectly capture the visual essence of this concept. Focus on lighting, texture, composition, and surreal elements.
+- SCRIPT SNIPPET: (For video formats) A brief, high-impact script snippet or dialogue that captures the tone and voice of the concept.
+- STORYBOARD: (For video formats) A sequence of 3-4 key frames. Each frame needs a "frame_description" (visual details) and an "annotation" (camera move, sound, or text overlay).
 
 4. CULTURAL HOOKS (based on current 2025-2026 landscape)
 Tag each concept with 2-3 specific and niche cultural currents that are highly relevant to the idea, in addition to broader ones. For each hook, provide a brief (1-2 sentence) justification for its inclusion, explaining how the concept resonates with that specific cultural undercurrent.
@@ -116,6 +120,12 @@ Format: A list of 5 one-line provocations.`;
 
 // --- Types ---
 
+interface StoryboardFrame {
+  frame_description: string;
+  visual_url?: string;
+  annotation?: string;
+}
+
 interface Concept {
   name: string;
   idea: string;
@@ -133,6 +143,8 @@ interface Concept {
   visual_url?: string;
   visual_video_url?: string;
   ai_visual_prompt: string;
+  script_snippet?: string;
+  storyboard?: StoryboardFrame[];
 }
 
 interface Results {
@@ -184,6 +196,8 @@ export default function App() {
   const [objective, setObjective] = useState("");
   const [audience, setAudience] = useState("");
   const [constraint, setConstraint] = useState("");
+  const [videoLength, setVideoLength] = useState<string>(":30s");
+  const [selectedConcepts, setSelectedConcepts] = useState<number[]>([]);
   const [quickFireInput, setQuickFireInput] = useState("");
   const [quickFireFormat, setQuickFireFormat] = useState("30s");
   const [quickFireResults, setQuickFireResults] = useState<string[]>([]);
@@ -232,6 +246,7 @@ CATEGORY: ${category || "Not specified"}
 OBJECTIVE: ${objective || "Brand fame / cultural relevance"}
 TARGET AUDIENCE: ${audience || "Culturally engaged 18-35"}
 CONSTRAINTS/CONTEXT: ${constraint || "None"}
+TARGET VIDEO LENGTH: ${videoLength}
 MODE: ${mode === "surreal" ? "SURREAL AI (Impossible Scenarios)" : "STANDARD STRATEGY"}
 
 Think D&AD. Think Cannes.`,
@@ -260,6 +275,18 @@ Think D&AD. Think Cannes.`,
                     risk_reason: { type: Type.STRING },
                     producibility: { type: Type.STRING },
                     ai_visual_prompt: { type: Type.STRING },
+                    script_snippet: { type: Type.STRING },
+                    storyboard: {
+                      type: Type.ARRAY,
+                      items: {
+                        type: Type.OBJECT,
+                        properties: {
+                          frame_description: { type: Type.STRING },
+                          annotation: { type: Type.STRING }
+                        },
+                        required: ["frame_description", "annotation"]
+                      }
+                    },
                     cultural_hooks: {
                       type: Type.ARRAY,
                       items: {
@@ -284,6 +311,7 @@ Think D&AD. Think Cannes.`,
       const parsed = JSON.parse(response.text || "{}");
       setResults(parsed);
       setExpandedConcept(0);
+      setSelectedConcepts([]);
       setView("results");
     } catch (e) {
       console.error(e);
@@ -376,6 +404,18 @@ Think D&AD. Think Cannes.`,
               risk_reason: { type: Type.STRING },
               producibility: { type: Type.STRING },
               ai_visual_prompt: { type: Type.STRING },
+              script_snippet: { type: Type.STRING },
+              storyboard: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    frame_description: { type: Type.STRING },
+                    annotation: { type: Type.STRING }
+                  },
+                  required: ["frame_description", "annotation"]
+                }
+              },
               cultural_hooks: {
                 type: Type.ARRAY,
                 items: {
@@ -400,6 +440,52 @@ Think D&AD. Think Cannes.`,
     } catch (e) {
       console.error(e);
       setError("Refinement failed. The creative team is stuck in a meeting.");
+    }
+  };
+
+  const visualizeStoryboard = async (conceptIndex: number) => {
+    if (!results) return;
+    const concept = results.concepts[conceptIndex];
+    if (!concept.storyboard) return;
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const updatedStoryboard = [...concept.storyboard];
+
+      for (let i = 0; i < updatedStoryboard.length; i++) {
+        const frame = updatedStoryboard[i];
+        const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-image",
+          contents: {
+            parts: [
+              {
+                text: `Storyboard frame for advertising concept "${concept.name}". 
+                Frame Description: ${frame.frame_description}. 
+                Style: Cinematic, high-end, professional lighting.`,
+              },
+            ],
+          },
+          config: {
+            imageConfig: {
+              aspectRatio: "16:9",
+            },
+          },
+        });
+
+        for (const part of response.candidates[0].content.parts) {
+          if (part.inlineData) {
+            updatedStoryboard[i] = { ...frame, visual_url: `data:image/png;base64,${part.inlineData.data}` };
+            break;
+          }
+        }
+      }
+
+      const newConcepts = [...results.concepts];
+      newConcepts[conceptIndex] = { ...concept, storyboard: updatedStoryboard };
+      setResults({ ...results, concepts: newConcepts });
+    } catch (e) {
+      console.error(e);
+      setError("Storyboard visualization failed.");
     }
   };
 
@@ -753,6 +839,28 @@ Think D&AD. Think Cannes.`,
                 </div>
               </div>
 
+              <div className="space-y-4">
+                <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
+                  Target Video Length
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[":15s", ":30s", ":60s", "Long Form", "Teaser"].map((l) => (
+                    <button
+                      key={l}
+                      onClick={() => setVideoLength(l)}
+                      className={cn(
+                        "px-4 py-2 font-mono text-[10px] uppercase tracking-widest border transition-all",
+                        videoLength === l
+                          ? "bg-white text-black border-white"
+                          : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:border-zinc-700"
+                      )}
+                    >
+                      {l}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <button
                 onClick={generateConcepts}
                 disabled={!brand.trim()}
@@ -825,20 +933,80 @@ Think D&AD. Think Cannes.`,
 
               {/* Concepts List */}
               <div className="space-y-4">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center gap-4">
+                    <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">
+                      {selectedConcepts.length} Concepts Selected for Comparison
+                    </div>
+                    {selectedConcepts.length > 0 && (
+                      <button
+                        onClick={() => setSelectedConcepts([])}
+                        className="font-mono text-[10px] text-red-500/50 hover:text-red-500 uppercase tracking-widest transition-colors"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  {selectedConcepts.length >= 2 && (
+                    <button
+                      onClick={() => setView("compare" as any)}
+                      className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 bg-white text-black hover:bg-zinc-200 transition-all"
+                    >
+                      Compare Side-by-Side
+                    </button>
+                  )}
+                </div>
                 {results.concepts.map((concept, idx) => (
                   <ConceptCard 
                     key={idx}
                     index={idx}
                     concept={concept}
                     isExpanded={expandedConcept === idx}
+                    isSelected={selectedConcepts.includes(idx)}
                     onToggle={() => setExpandedConcept(expandedConcept === idx ? null : idx)}
+                    onCompare={() => {
+                      if (selectedConcepts.includes(idx)) {
+                        setSelectedConcepts(selectedConcepts.filter(i => i !== idx));
+                      } else if (selectedConcepts.length < 3) {
+                        setSelectedConcepts([...selectedConcepts, idx]);
+                      }
+                    }}
                     onRefine={(feedback) => refineConcept(idx, feedback)}
                     onVisualize={() => visualizeConcept(idx)}
                     onVisualizeVideo={() => visualizeVideo(idx)}
+                    onVisualizeStoryboard={() => visualizeStoryboard(idx)}
                     onCopy={copyToClipboard}
                   />
                 ))}
               </div>
+
+              <AnimatePresence>
+                {selectedConcepts.length >= 2 && (
+                  <motion.div 
+                    initial={{ y: 100 }}
+                    animate={{ y: 0 }}
+                    exit={{ y: 100 }}
+                    className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40"
+                  >
+                    <button
+                      onClick={() => setView("compare" as any)}
+                      className="bg-white text-black px-8 py-4 font-display italic text-xl shadow-2xl hover:scale-105 transition-all flex items-center gap-4"
+                    >
+                      Compare {selectedConcepts.length} Concepts
+                      <ArrowRight size={20} />
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {view === ("compare" as any) && (
+                  <ComparisonView 
+                    concepts={selectedConcepts.map(idx => results.concepts[idx])}
+                    onClose={() => setView("results")}
+                  />
+                )}
+              </AnimatePresence>
 
               <div className="flex justify-center pt-8">
                 <button
@@ -956,30 +1124,88 @@ function InputGroup({ label, placeholder, value, onChange, mono }: { label: stri
   );
 }
 
+function ComparisonView({ concepts, onClose }: { concepts: Concept[]; onClose: () => void }) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl overflow-y-auto p-6 md:p-12"
+    >
+      <div className="max-w-7xl mx-auto">
+        <div className="flex justify-between items-center mb-12 border-b border-zinc-800 pb-8">
+          <div>
+            <h2 className="font-display text-4xl text-white mb-2">Concept Comparison</h2>
+            <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Side-by-side strategic analysis</p>
+          </div>
+          <button 
+            onClick={onClose}
+            className="font-mono text-[10px] uppercase tracking-widest px-6 py-3 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+          >
+            <X size={12} />
+            Close Comparison
+          </button>
+        </div>
+
+        <div className={cn(
+          "grid gap-8",
+          concepts.length === 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 md:grid-cols-3"
+        )}>
+          {concepts.map((concept, idx) => (
+            <div key={idx} className="space-y-8 bg-zinc-900/50 border border-zinc-800 p-8">
+              <div>
+                <span className="font-mono text-[10px] text-zinc-700 block mb-2">0{idx + 1}</span>
+                <h3 className="font-display text-3xl text-white mb-4">{concept.name}</h3>
+                <RiskBadge level={concept.risk_level} />
+              </div>
+
+              <div className="space-y-6">
+                <DetailBlock label="The Idea" value={concept.idea} />
+                <DetailBlock label="Format" value={concept.format} />
+                <DetailBlock label="Strategic Logic" value={concept.why_it_works} />
+                <DetailBlock label="Risk Context" value={concept.risk_reason} />
+                <DetailBlock label="Execution" value={concept.execution} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function ConceptCard({ 
   concept, 
   index, 
   isExpanded, 
+  isSelected,
   onToggle, 
+  onCompare,
   onRefine, 
   onVisualize,
   onVisualizeVideo,
+  onVisualizeStoryboard,
   onCopy
 }: { 
   concept: Concept; 
   index: number; 
   isExpanded: boolean; 
+  isSelected: boolean;
   onToggle: () => void; 
+  onCompare: () => void;
   onRefine: (feedback: string) => Promise<void>; 
   onVisualize: () => Promise<void>;
   onVisualizeVideo: () => Promise<void>;
+  onVisualizeStoryboard: () => Promise<void>;
   onCopy: (text: string) => void;
 }) {
   const [refineInput, setRefineInput] = useState("");
   const [isRefining, setIsRefining] = useState(false);
   const [isVisualizing, setIsVisualizing] = useState(false);
   const [isVisualizingVideo, setIsVisualizingVideo] = useState(false);
+  const [isVisualizingStoryboard, setIsVisualizingStoryboard] = useState(false);
   const [showRefine, setShowRefine] = useState(false);
+  const [activeTab, setActiveTab] = useState<"details" | "storyboard" | "script">("details");
 
   const handleRefine = async () => {
     if (!refineInput.trim()) return;
@@ -1002,28 +1228,49 @@ function ConceptCard({
     setIsVisualizingVideo(false);
   };
 
+  const handleVisualizeStoryboard = async () => {
+    setIsVisualizingStoryboard(true);
+    await onVisualizeStoryboard();
+    setIsVisualizingStoryboard(false);
+  };
+
   return (
     <div className={cn(
       "border transition-all duration-500 overflow-hidden",
-      isExpanded ? "bg-zinc-900/80 border-zinc-700" : "bg-zinc-900/30 border-zinc-800 hover:border-zinc-700"
+      isExpanded ? "bg-zinc-900/80 border-zinc-700" : "bg-zinc-900/30 border-zinc-800 hover:border-zinc-700",
+      isSelected && "ring-2 ring-white border-white"
     )}>
-      <button 
-        onClick={onToggle}
-        className="w-full px-8 py-6 flex items-center justify-between text-left group"
-      >
-        <div className="flex items-baseline gap-6">
-          <span className="font-mono text-[10px] text-zinc-700">0{index + 1}</span>
-          <h3 className="font-display text-2xl text-white group-hover:translate-x-1 transition-transform">
-            {concept.name}
-          </h3>
-          <div className="hidden md:block">
-            <RiskBadge level={concept.risk_level} />
+      <div className="flex items-center">
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            onCompare();
+          }}
+          className={cn(
+            "px-4 py-6 border-r border-zinc-800 transition-colors flex items-center justify-center h-full",
+            isSelected ? "text-white bg-zinc-800" : "text-zinc-700 hover:text-zinc-400"
+          )}
+        >
+          {isSelected ? <Check size={16} /> : <Plus size={16} />}
+        </button>
+        <button 
+          onClick={onToggle}
+          className="flex-1 px-8 py-6 flex items-center justify-between text-left group"
+        >
+          <div className="flex items-baseline gap-6">
+            <span className="font-mono text-[10px] text-zinc-700">0{index + 1}</span>
+            <h3 className="font-display text-2xl text-white group-hover:translate-x-1 transition-transform">
+              {concept.name}
+            </h3>
+            <div className="hidden md:block">
+              <RiskBadge level={concept.risk_level} />
+            </div>
           </div>
-        </div>
-        <div className="text-zinc-700 group-hover:text-zinc-400 transition-colors">
-          {isExpanded ? <Minus size={20} /> : <Plus size={20} />}
-        </div>
-      </button>
+          <div className="text-zinc-700 group-hover:text-zinc-400 transition-colors">
+            {isExpanded ? <Minus size={20} /> : <Plus size={20} />}
+          </div>
+        </button>
+      </div>
 
       <AnimatePresence>
         {isExpanded && (
@@ -1033,7 +1280,7 @@ function ConceptCard({
             exit={{ height: 0, opacity: 0 }}
             className="px-8 pb-10 border-t border-zinc-800/50"
           >
-            <div className="pt-8 space-y-10">
+            <div className="pt-8 space-y-8">
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
                 <p className="font-display italic text-2xl text-white leading-tight max-w-2xl">
                   {concept.idea}
@@ -1065,121 +1312,206 @@ function ConceptCard({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {concept.visual_url && (
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden"
+              {/* Tabs */}
+              <div className="flex gap-6 border-b border-zinc-800 pb-2">
+                {[
+                  { id: "details", label: "Strategic Details" },
+                  { id: "storyboard", label: "Storyboard" },
+                  { id: "script", label: "Script Snippet" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={cn(
+                      "font-mono text-[10px] uppercase tracking-widest pb-2 border-b transition-all",
+                      activeTab === tab.id 
+                        ? "text-white border-white" 
+                        : "text-zinc-600 border-transparent hover:text-zinc-400"
+                    )}
                   >
-                    <img 
-                      src={concept.visual_url} 
-                      alt={concept.name} 
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
-                    <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest">
-                      Mood Board
-                    </div>
-                  </motion.div>
-                )}
-
-                {concept.visual_video_url && (
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden"
-                  >
-                    <video 
-                      src={concept.visual_video_url} 
-                      controls
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest pointer-events-none">
-                      AI Video Snippet
-                    </div>
-                  </motion.div>
-                )}
+                    {tab.label}
+                  </button>
+                ))}
               </div>
 
-              <AnimatePresence>
-                {showRefine && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="p-6 bg-zinc-800/30 border border-zinc-700 space-y-4"
-                  >
-                    <div className="space-y-2">
-                      <label className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Refinement Feedback</label>
-                      <textarea
-                        value={refineInput}
-                        onChange={(e) => setRefineInput(e.target.value)}
-                        placeholder="e.g. Make it more provocative, explore a different format, or reduce the risk..."
-                        className="w-full bg-zinc-900/50 border border-zinc-800 px-4 py-3 text-sm text-zinc-200 outline-none focus:border-zinc-600 transition-colors placeholder:text-zinc-700 min-h-[80px] resize-none"
-                      />
-                    </div>
-                    <div className="flex justify-end">
-                      <button
-                        onClick={handleRefine}
-                        disabled={isRefining || !refineInput.trim()}
-                        className="font-mono text-[10px] uppercase tracking-widest px-6 py-2 bg-white text-black hover:bg-zinc-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              {activeTab === "details" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-10"
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {concept.visual_url && (
+                      <div className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden">
+                        <img 
+                          src={concept.visual_url} 
+                          alt={concept.name} 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+                        <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest">
+                          Mood Board
+                        </div>
+                      </div>
+                    )}
+
+                    {concept.visual_video_url && (
+                      <div className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden">
+                        <video 
+                          src={concept.visual_video_url} 
+                          controls
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest pointer-events-none">
+                          AI Video Snippet
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <AnimatePresence>
+                    {showRefine && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="p-6 bg-zinc-800/30 border border-zinc-700 space-y-4"
                       >
-                        {isRefining ? "Regenerating..." : "Apply Refinement"}
+                        <div className="space-y-2">
+                          <label className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Refinement Feedback</label>
+                          <textarea
+                            value={refineInput}
+                            onChange={(e) => setRefineInput(e.target.value)}
+                            placeholder="e.g. Make it more provocative, explore a different format, or reduce the risk..."
+                            className="w-full bg-zinc-900/50 border border-zinc-800 px-4 py-3 text-sm text-zinc-200 outline-none focus:border-zinc-600 transition-colors placeholder:text-zinc-700 min-h-[80px] resize-none"
+                          />
+                        </div>
+                        <div className="flex justify-end">
+                          <button
+                            onClick={handleRefine}
+                            disabled={isRefining || !refineInput.trim()}
+                            className="font-mono text-[10px] uppercase tracking-widest px-6 py-2 bg-white text-black hover:bg-zinc-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isRefining ? "Regenerating..." : "Apply Refinement"}
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <DetailBlock label="Format" value={concept.format} />
+                    <DetailBlock label="Risk Context" value={concept.risk_reason || "Calculated risk for maximum impact."} />
+                  </div>
+
+                  <DetailBlock label="The Execution" value={concept.execution} />
+                  <DetailBlock label="Strategic Logic" value={concept.why_it_works} />
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <DetailBlock label="Reference Energy" value={concept.reference_energy} />
+                    <DetailBlock label="Producibility" value={concept.producibility} />
+                  </div>
+
+                  <div className="p-6 bg-zinc-950 border border-zinc-800 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-cyan-400">
+                        <Sparkles size={12} />
+                        <span className="font-mono text-[10px] uppercase tracking-widest">AI Visual Prompt (Midjourney / DALL-E)</span>
+                      </div>
+                      <button 
+                        onClick={() => onCopy(concept.ai_visual_prompt)}
+                        className="text-zinc-600 hover:text-zinc-400 transition-colors"
+                      >
+                        <Copy size={14} />
                       </button>
                     </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                <DetailBlock label="Format" value={concept.format} />
-                <DetailBlock label="Risk Context" value={concept.risk_reason || "Calculated risk for maximum impact."} />
-              </div>
-
-              <DetailBlock label="The Execution" value={concept.execution} />
-              <DetailBlock label="Strategic Logic" value={concept.why_it_works} />
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                <DetailBlock label="Reference Energy" value={concept.reference_energy} />
-                <DetailBlock label="Producibility" value={concept.producibility} />
-              </div>
-
-              <div className="p-6 bg-zinc-950 border border-zinc-800 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-cyan-400">
-                    <Sparkles size={12} />
-                    <span className="font-mono text-[10px] uppercase tracking-widest">AI Visual Prompt (Midjourney / DALL-E)</span>
+                    <p className="font-mono text-[11px] text-zinc-400 italic leading-relaxed">
+                      "{concept.ai_visual_prompt}"
+                    </p>
                   </div>
-                  <button 
-                    onClick={() => onCopy(concept.ai_visual_prompt)}
-                    className="text-zinc-600 hover:text-zinc-400 transition-colors"
-                  >
-                    <Copy size={14} />
-                  </button>
-                </div>
-                <p className="font-mono text-[11px] text-zinc-400 italic leading-relaxed">
-                  "{concept.ai_visual_prompt}"
-                </p>
-              </div>
 
-              {concept.cultural_hooks?.length > 0 && (
-                <div className="space-y-4">
-                  <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Cultural Hooks & Justifications</span>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {concept.cultural_hooks.map((item, i) => (
-                      <div key={i} className="p-4 bg-zinc-800/30 border border-zinc-800 space-y-2">
-                        <span className="px-2 py-0.5 bg-zinc-800 border border-zinc-700 text-[9px] font-mono text-zinc-400 uppercase tracking-wider">
-                          {item.hook}
-                        </span>
-                        <p className="text-xs text-zinc-400 leading-relaxed italic">
-                          {item.justification}
-                        </p>
+                  {concept.cultural_hooks?.length > 0 && (
+                    <div className="space-y-4">
+                      <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Cultural Hooks & Justifications</span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {concept.cultural_hooks.map((item, i) => (
+                          <div key={i} className="p-4 bg-zinc-800/30 border border-zinc-800 space-y-2">
+                            <span className="px-2 py-0.5 bg-zinc-800 border border-zinc-700 text-[9px] font-mono text-zinc-400 uppercase tracking-wider">
+                              {item.hook}
+                            </span>
+                            <p className="text-xs text-zinc-400 leading-relaxed italic">
+                              {item.justification}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+
+              {activeTab === "storyboard" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-8"
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="space-y-1">
+                      <h4 className="font-display text-xl text-white">Visual Narrative</h4>
+                      <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Key frame breakdown</p>
+                    </div>
+                    <button
+                      onClick={handleVisualizeStoryboard}
+                      disabled={isVisualizingStoryboard}
+                      className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                    >
+                      <Sparkles size={12} className={isVisualizingStoryboard ? "animate-pulse" : ""} />
+                      {isVisualizingStoryboard ? "Visualizing Frames..." : "Visualize Storyboard"}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {concept.storyboard?.map((frame, i) => (
+                      <div key={i} className="space-y-3">
+                        <div className="relative aspect-video bg-zinc-950 border border-zinc-800 overflow-hidden group/frame">
+                          {frame.visual_url ? (
+                            <img src={frame.visual_url} alt={`Frame ${i+1}`} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-zinc-800 font-mono text-[10px] uppercase tracking-widest">
+                              Frame 0{i+1}
+                            </div>
+                          )}
+                          <div className="absolute top-2 left-2 bg-black/80 px-2 py-1 font-mono text-[10px] text-white">0{i+1}</div>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="text-xs text-zinc-300 leading-relaxed font-medium">{frame.frame_description}</p>
+                          <div className="flex gap-2 items-start">
+                            <div className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest pt-0.5 shrink-0">Note:</div>
+                            <p className="text-[10px] text-zinc-500 italic leading-relaxed">{frame.annotation}</p>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
-                </div>
+                </motion.div>
+              )}
+
+              {activeTab === "script" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-6"
+                >
+                  <div className="space-y-1">
+                    <h4 className="font-display text-xl text-white">Script Snippet</h4>
+                    <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Tone & Dialogue direction</p>
+                  </div>
+                  <div className="bg-zinc-950 border border-zinc-800 p-8 font-mono text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap italic">
+                    {concept.script_snippet || "No script snippet generated for this concept."}
+                  </div>
+                </motion.div>
               )}
             </div>
           </motion.div>
