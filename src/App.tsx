@@ -56,6 +56,7 @@ For each concept provide:
 - RISK LEVEL: safe, brave, or dangerous.
 - RISK REASON: Provide a detailed explanation of the potential negative implications, brand safety concerns, or execution challenges associated with this specific idea. Avoid generic statements.
 - PRODUCIBILITY: Can this be made with AI tools + minimal budget? How?
+- AI VISUAL PROMPT: A highly detailed, professional prompt for an AI image generator (like Midjourney or DALL-E) that would perfectly capture the visual essence of this concept. Focus on lighting, texture, composition, and surreal elements.
 
 4. CULTURAL HOOKS (based on current 2025-2026 landscape)
 Tag each concept with 2-3 specific and niche cultural currents that are highly relevant to the idea, in addition to broader ones. For each hook, provide a brief (1-2 sentence) justification for its inclusion, explaining how the concept resonates with that specific cultural undercurrent.
@@ -128,6 +129,7 @@ interface Concept {
   }[];
   visual_url?: string;
   visual_video_url?: string;
+  ai_visual_prompt: string;
 }
 
 interface Results {
@@ -253,6 +255,7 @@ Think D&AD. Think Cannes.`,
                     risk_level: { type: Type.STRING, enum: ["safe", "brave", "dangerous"] },
                     risk_reason: { type: Type.STRING },
                     producibility: { type: Type.STRING },
+                    ai_visual_prompt: { type: Type.STRING },
                     cultural_hooks: {
                       type: Type.ARRAY,
                       items: {
@@ -265,7 +268,7 @@ Think D&AD. Think Cannes.`,
                       }
                     }
                   },
-                  required: ["name", "idea", "format", "execution", "why_it_works", "reference_energy", "risk_level", "risk_reason", "producibility", "cultural_hooks"]
+                  required: ["name", "idea", "format", "execution", "why_it_works", "reference_energy", "risk_level", "risk_reason", "producibility", "ai_visual_prompt", "cultural_hooks"]
                 }
               }
             },
@@ -368,6 +371,7 @@ Think D&AD. Think Cannes.`,
               risk_level: { type: Type.STRING, enum: ["safe", "brave", "dangerous"] },
               risk_reason: { type: Type.STRING },
               producibility: { type: Type.STRING },
+              ai_visual_prompt: { type: Type.STRING },
               cultural_hooks: {
                 type: Type.ARRAY,
                 items: {
@@ -380,7 +384,7 @@ Think D&AD. Think Cannes.`,
                 }
               }
             },
-            required: ["name", "idea", "format", "execution", "why_it_works", "reference_energy", "risk_level", "risk_reason", "producibility", "cultural_hooks"]
+            required: ["name", "idea", "format", "execution", "why_it_works", "reference_energy", "risk_level", "risk_reason", "producibility", "ai_visual_prompt", "cultural_hooks"]
           }
         }
       });
@@ -807,6 +811,7 @@ Think D&AD. Think Cannes.`,
                     onRefine={(feedback) => refineConcept(idx, feedback)}
                     onVisualize={() => visualizeConcept(idx)}
                     onVisualizeVideo={() => visualizeVideo(idx)}
+                    onCopy={copyToClipboard}
                   />
                 ))}
               </div>
@@ -934,7 +939,8 @@ function ConceptCard({
   onToggle, 
   onRefine, 
   onVisualize,
-  onVisualizeVideo
+  onVisualizeVideo,
+  onCopy
 }: { 
   concept: Concept; 
   index: number; 
@@ -943,6 +949,7 @@ function ConceptCard({
   onRefine: (feedback: string) => Promise<void>; 
   onVisualize: () => Promise<void>;
   onVisualizeVideo: () => Promise<void>;
+  onCopy: (text: string) => void;
 }) {
   const [refineInput, setRefineInput] = useState("");
   const [isRefining, setIsRefining] = useState(false);
@@ -1113,6 +1120,24 @@ function ConceptCard({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <DetailBlock label="Reference Energy" value={concept.reference_energy} />
                 <DetailBlock label="Producibility" value={concept.producibility} />
+              </div>
+
+              <div className="p-6 bg-zinc-950 border border-zinc-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-cyan-400">
+                    <Sparkles size={12} />
+                    <span className="font-mono text-[10px] uppercase tracking-widest">AI Visual Prompt (Midjourney / DALL-E)</span>
+                  </div>
+                  <button 
+                    onClick={() => onCopy(concept.ai_visual_prompt)}
+                    className="text-zinc-600 hover:text-zinc-400 transition-colors"
+                  >
+                    <Copy size={14} />
+                  </button>
+                </div>
+                <p className="font-mono text-[11px] text-zinc-400 italic leading-relaxed">
+                  "{concept.ai_visual_prompt}"
+                </p>
               </div>
 
               {concept.cultural_hooks?.length > 0 && (
