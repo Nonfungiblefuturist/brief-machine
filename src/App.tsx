@@ -100,6 +100,16 @@ For each trend, provide:
 - A "video_hook" — A 3-second hook for social media (TikTok/Reels) to grab attention immediately.
 - A "ai_execution_methods" — Detail specific AI-driven methods (e.g., using specific tools like Midjourney, Runway, ElevenLabs) to execute the viral concept and video hook on a minimal budget.`;
 
+const QUICK_FIRE_PROMPT = `You are an elite creative director. You generate high-impact, one-line AI-native advertising ideas that are designed to go viral. 
+
+Each idea must:
+- Be a single, provocative sentence.
+- Leverage AI-native surrealism or impossible scenarios.
+- Solve a cultural tension for the brand.
+- Be immediately "visualizable" in the mind.
+
+Format: A list of 5 one-line provocations.`;
+
 // --- Types ---
 
 interface Concept {
@@ -117,6 +127,7 @@ interface Concept {
     justification: string;
   }[];
   visual_url?: string;
+  visual_video_url?: string;
 }
 
 interface Results {
@@ -161,13 +172,15 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "quickfire">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [brand, setBrand] = useState("");
   const [category, setCategory] = useState("");
   const [objective, setObjective] = useState("");
   const [audience, setAudience] = useState("");
   const [constraint, setConstraint] = useState("");
+  const [quickFireInput, setQuickFireInput] = useState("");
+  const [quickFireResults, setQuickFireResults] = useState<string[]>([]);
   const [results, setResults] = useState<Results | null>(null);
   const [trends, setTrends] = useState<Trend[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -426,6 +439,88 @@ Think D&AD. Think Cannes.`,
     }
   };
 
+  const visualizeVideo = async (index: number) => {
+    if (!results) return;
+    const concept = results.concepts[index];
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      let operation = await ai.models.generateVideos({
+        model: 'veo-3.1-lite-generate-preview',
+        prompt: `A high-end, award-winning advertising video snippet for the concept "${concept.name}". 
+        Execution: ${concept.execution}. 
+        Cinematic, surreal, and visually arresting. 
+        High-end production value, professional lighting.`,
+        config: {
+          numberOfVideos: 1,
+          resolution: '720p',
+          aspectRatio: '16:9'
+        }
+      });
+
+      while (!operation.done) {
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        operation = await ai.operations.getVideosOperation({ operation: operation });
+      }
+
+      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+      if (downloadLink) {
+        // Fetch the video with the API key
+        const response = await fetch(downloadLink, {
+          method: 'GET',
+          headers: {
+            'x-goog-api-key': process.env.GEMINI_API_KEY as string,
+          },
+        });
+        const blob = await response.blob();
+        const videoUrl = URL.createObjectURL(blob);
+
+        const newConcepts = [...results.concepts];
+        newConcepts[index] = { ...concept, visual_video_url: videoUrl };
+        setResults({ ...results, concepts: newConcepts });
+      }
+    } catch (e) {
+      console.error(e);
+      setError("Video generation failed. The AI director is on strike.");
+    }
+  };
+
+  const generateQuickFire = async () => {
+    if (!quickFireInput.trim()) return;
+    setError(null);
+    setView("loading");
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: `Generate 5 one-line viral AI ad/video ideas for: ${quickFireInput}`,
+        config: {
+          systemInstruction: QUICK_FIRE_PROMPT,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              ideas: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              }
+            },
+            required: ["ideas"]
+          }
+        }
+      });
+
+      const parsed = JSON.parse(response.text || "{}");
+      setQuickFireResults(parsed.ideas || []);
+      setView("quickfire");
+    } catch (e) {
+      console.error(e);
+      setError("Quick Fire failed. The creative sparks are damp.");
+      setView("input");
+    }
+  };
+
   return (
     <div className="min-h-screen relative overflow-x-hidden selection:bg-white selection:text-black">
       <div className="grain-overlay" />
@@ -458,6 +553,7 @@ Think D&AD. Think Cannes.`,
           <nav className="flex flex-wrap gap-2 mt-8">
             {[
               { id: "input", label: "Generate", icon: Sparkles },
+              { id: "quickfire", label: "Quick Fire", icon: Zap },
               { id: "trends", label: "Trend Scanner", icon: Search, action: fetchTrends },
               { id: "prompt", label: "Prompt DNA", icon: Code },
             ].map((item) => (
@@ -497,6 +593,70 @@ Think D&AD. Think Cannes.`,
 
         {/* Views */}
         <main>
+          {/* QUICK FIRE VIEW */}
+          {view === "quickfire" && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-8"
+            >
+              <div className="bg-zinc-900/50 border border-zinc-800 p-8">
+                <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest mb-6">
+                  Quick Fire Mode
+                </div>
+                <div className="flex gap-4">
+                  <input 
+                    type="text"
+                    value={quickFireInput}
+                    onChange={(e) => setQuickFireInput(e.target.value)}
+                    placeholder="Enter brand or topic for instant AI ideas..."
+                    className="flex-1 bg-zinc-950 border border-zinc-800 px-4 py-3 text-sm text-zinc-200 outline-none focus:border-zinc-600 transition-colors"
+                  />
+                  <button 
+                    onClick={generateQuickFire}
+                    className="bg-white text-black px-6 py-3 font-mono text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-colors"
+                  >
+                    Fire
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {quickFireResults.map((idea, idx) => (
+                  <motion.div 
+                    key={idx}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: idx * 0.1 }}
+                    className="bg-zinc-900/30 border border-zinc-800 p-6 flex gap-6 items-center group hover:border-zinc-700 transition-all"
+                  >
+                    <span className="font-mono text-[10px] text-zinc-700">0{idx + 1}</span>
+                    <p className="font-display italic text-xl text-white flex-1 leading-tight">
+                      {idea}
+                    </p>
+                    <button 
+                      onClick={() => copyToClipboard(idea)}
+                      className="text-zinc-700 group-hover:text-zinc-400 transition-colors"
+                    >
+                      <Copy size={16} />
+                    </button>
+                  </motion.div>
+                ))}
+              </div>
+
+              {quickFireResults.length > 0 && (
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => setView("input")}
+                    className="font-mono text-[10px] text-zinc-500 hover:text-white transition-colors"
+                  >
+                    Back to Full Brief
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          )}
+
           {/* INPUT VIEW */}
           {view === "input" && (
             <motion.div 
@@ -646,6 +806,7 @@ Think D&AD. Think Cannes.`,
                     onToggle={() => setExpandedConcept(expandedConcept === idx ? null : idx)}
                     onRefine={(feedback) => refineConcept(idx, feedback)}
                     onVisualize={() => visualizeConcept(idx)}
+                    onVisualizeVideo={() => visualizeVideo(idx)}
                   />
                 ))}
               </div>
@@ -766,10 +927,27 @@ function InputGroup({ label, placeholder, value, onChange, mono }: { label: stri
   );
 }
 
-function ConceptCard({ concept, index, isExpanded, onToggle, onRefine, onVisualize }: { concept: Concept; index: number; isExpanded: boolean; onToggle: () => void; onRefine: (feedback: string) => Promise<void>; onVisualize: () => Promise<void> }) {
+function ConceptCard({ 
+  concept, 
+  index, 
+  isExpanded, 
+  onToggle, 
+  onRefine, 
+  onVisualize,
+  onVisualizeVideo
+}: { 
+  concept: Concept; 
+  index: number; 
+  isExpanded: boolean; 
+  onToggle: () => void; 
+  onRefine: (feedback: string) => Promise<void>; 
+  onVisualize: () => Promise<void>;
+  onVisualizeVideo: () => Promise<void>;
+}) {
   const [refineInput, setRefineInput] = useState("");
   const [isRefining, setIsRefining] = useState(false);
   const [isVisualizing, setIsVisualizing] = useState(false);
+  const [isVisualizingVideo, setIsVisualizingVideo] = useState(false);
   const [showRefine, setShowRefine] = useState(false);
 
   const handleRefine = async () => {
@@ -785,6 +963,12 @@ function ConceptCard({ concept, index, isExpanded, onToggle, onRefine, onVisuali
     setIsVisualizing(true);
     await onVisualize();
     setIsVisualizing(false);
+  };
+
+  const handleVisualizeVideo = async () => {
+    setIsVisualizingVideo(true);
+    await onVisualizeVideo();
+    setIsVisualizingVideo(false);
   };
 
   return (
@@ -823,14 +1007,22 @@ function ConceptCard({ concept, index, isExpanded, onToggle, onRefine, onVisuali
                 <p className="font-display italic text-2xl text-white leading-tight max-w-2xl">
                   {concept.idea}
                 </p>
-                <div className="flex gap-2 shrink-0">
+                <div className="flex flex-wrap gap-2 shrink-0">
                   <button
                     onClick={handleVisualize}
                     disabled={isVisualizing || !!concept.visual_url}
                     className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
                   >
                     <Sparkles size={12} className={isVisualizing ? "animate-pulse" : ""} />
-                    {isVisualizing ? "Visualizing..." : concept.visual_url ? "Visualized" : "Visualize Concept"}
+                    {isVisualizing ? "Visualizing..." : concept.visual_url ? "Mood Board Ready" : "Mood Board"}
+                  </button>
+                  <button
+                    onClick={handleVisualizeVideo}
+                    disabled={isVisualizingVideo || !!concept.visual_video_url}
+                    className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                  >
+                    <Zap size={12} className={isVisualizingVideo ? "animate-pulse" : ""} />
+                    {isVisualizingVideo ? "Generating..." : concept.visual_video_url ? "Video Ready" : "Video Snippet"}
                   </button>
                   <button
                     onClick={() => setShowRefine(!showRefine)}
@@ -842,24 +1034,43 @@ function ConceptCard({ concept, index, isExpanded, onToggle, onRefine, onVisuali
                 </div>
               </div>
 
-              {concept.visual_url && (
-                <motion.div 
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden"
-                >
-                  <img 
-                    src={concept.visual_url} 
-                    alt={concept.name} 
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
-                  <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest">
-                    AI Generated Mood Board
-                  </div>
-                </motion.div>
-              )}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {concept.visual_url && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden"
+                  >
+                    <img 
+                      src={concept.visual_url} 
+                      alt={concept.name} 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+                    <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest">
+                      Mood Board
+                    </div>
+                  </motion.div>
+                )}
+
+                {concept.visual_video_url && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden"
+                  >
+                    <video 
+                      src={concept.visual_video_url} 
+                      controls
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest pointer-events-none">
+                      AI Video Snippet
+                    </div>
+                  </motion.div>
+                )}
+              </div>
 
               <AnimatePresence>
                 {showRefine && (
