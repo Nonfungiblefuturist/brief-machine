@@ -103,11 +103,14 @@ For each trend, provide:
 
 const QUICK_FIRE_PROMPT = `You are an elite creative director. You generate high-impact, one-line AI-native advertising ideas that are designed to go viral. 
 
+The user has specified a target DURATION/FORMAT: {duration_context}
+
 Each idea must:
 - Be a single, provocative sentence.
 - Leverage AI-native surrealism or impossible scenarios.
 - Solve a cultural tension for the brand.
 - Be immediately "visualizable" in the mind.
+- Be specifically tailored to the requested DURATION/FORMAT (e.g., if it's 15s, it must be a quick punch; if it's a pitch pilot, it must feel like a world-building teaser).
 
 Format: A list of 5 one-line provocations.`;
 
@@ -182,6 +185,7 @@ export default function App() {
   const [audience, setAudience] = useState("");
   const [constraint, setConstraint] = useState("");
   const [quickFireInput, setQuickFireInput] = useState("");
+  const [quickFireFormat, setQuickFireFormat] = useState("30s");
   const [quickFireResults, setQuickFireResults] = useState<string[]>([]);
   const [results, setResults] = useState<Results | null>(null);
   const [trends, setTrends] = useState<Trend[] | null>(null);
@@ -498,9 +502,10 @@ Think D&AD. Think Cannes.`,
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
-        contents: `Generate 5 one-line viral AI ad/video ideas for: ${quickFireInput}`,
+        contents: `Generate 5 one-line viral AI ad/video ideas for: ${quickFireInput}. 
+        Target Format/Duration: ${quickFireFormat}`,
         config: {
-          systemInstruction: QUICK_FIRE_PROMPT,
+          systemInstruction: QUICK_FIRE_PROMPT.replace("{duration_context}", quickFireFormat),
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
@@ -608,20 +613,39 @@ Think D&AD. Think Cannes.`,
                 <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest mb-6">
                   Quick Fire Mode
                 </div>
-                <div className="flex gap-4">
-                  <input 
-                    type="text"
-                    value={quickFireInput}
-                    onChange={(e) => setQuickFireInput(e.target.value)}
-                    placeholder="Enter brand or topic for instant AI ideas..."
-                    className="flex-1 bg-zinc-950 border border-zinc-800 px-4 py-3 text-sm text-zinc-200 outline-none focus:border-zinc-600 transition-colors"
-                  />
-                  <button 
-                    onClick={generateQuickFire}
-                    className="bg-white text-black px-6 py-3 font-mono text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-colors"
-                  >
-                    Fire
-                  </button>
+                <div className="space-y-6">
+                  <div className="flex gap-4">
+                    <input 
+                      type="text"
+                      value={quickFireInput}
+                      onChange={(e) => setQuickFireInput(e.target.value)}
+                      placeholder="Enter brand or topic for instant AI ideas..."
+                      className="flex-1 bg-zinc-950 border border-zinc-800 px-4 py-3 text-sm text-zinc-200 outline-none focus:border-zinc-600 transition-colors"
+                    />
+                    <button 
+                      onClick={generateQuickFire}
+                      className="bg-white text-black px-6 py-3 font-mono text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-colors"
+                    >
+                      Fire
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {["15s", "30s", "1m", "2m", "Pitch Pilot / Teaser"].map((f) => (
+                      <button
+                        key={f}
+                        onClick={() => setQuickFireFormat(f)}
+                        className={cn(
+                          "px-3 py-1.5 font-mono text-[9px] uppercase tracking-widest border transition-all",
+                          quickFireFormat === f
+                            ? "bg-zinc-200 text-black border-zinc-200"
+                            : "bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600"
+                        )}
+                      >
+                        {f}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
