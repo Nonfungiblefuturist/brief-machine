@@ -123,8 +123,7 @@ For each trend, provide:
 - The emotional undercurrent (what people FEEL about this)
 - A "brief starter" — a provocative question a brand could build a campaign around
 - A "viral_concept" — A specific, high-impact idea for a video or stunt that leverages this trend. It should be designed for shareability.
-- A "video_hook" — A 3-second hook for social media (TikTok/Reels) to grab attention immediately.
-- A "ai_execution_methods" — Detail specific AI-driven methods (e.g., using specific tools like Midjourney, Runway, ElevenLabs) to execute the viral concept and video hook on a minimal budget.`;
+- A "video_hook" — A 3-second hook for social media (TikTok/Reels) to grab attention immediately.`;
 
 // --- Types ---
 
@@ -156,6 +155,8 @@ interface Concept {
   ai_visual_prompt: string;
   script_snippet?: string;
   storyboard?: StoryboardFrame[];
+  rating?: number;
+  variations?: Concept[];
 }
 
 interface Results {
@@ -173,7 +174,6 @@ interface Trend {
   brief_starter: string;
   viral_concept: string;
   video_hook: string;
-  ai_execution_methods: string;
 }
 
 // --- Components ---
@@ -200,7 +200,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
@@ -214,6 +214,13 @@ export default function App() {
   const [expandedConcept, setExpandedConcept] = useState<number | null>(0);
   const [copied, setCopied] = useState(false);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+  const [pastRatings, setPastRatings] = useState<{ concept: string; rating: number }[]>([]);
+  const [isGeneratingVariations, setIsGeneratingVariations] = useState<number | null>(null);
+  const [filterRating, setFilterRating] = useState<number>(0);
+  const [storyboarderInput, setStoryboarderInput] = useState("");
+  const [storyboarderImages, setStoryboarderImages] = useState<string[]>([]);
+  const [storyboarderFrames, setStoryboarderFrames] = useState<StoryboardFrame[]>([]);
+  const [isGeneratingStoryboarder, setIsGeneratingStoryboarder] = useState(false);
 
   useEffect(() => {
     const checkKey = async () => {
@@ -270,6 +277,11 @@ export default function App() {
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
+      const pastPreferences = pastRatings
+        .filter(r => r.rating >= 4)
+        .map(r => r.concept)
+        .join("\n- ");
+
       // Combined prompt for Strategic Foundation, 3 Deep Concepts, and 5 Quick Provocations
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
@@ -277,6 +289,8 @@ export default function App() {
 TARGET VIDEO LENGTH: ${videoLength}
 INSPIRATION MODE: ${inspiration.toUpperCase()}
 MODE: ${mode === "surreal" ? "SURREAL AI (Impossible Scenarios)" : "STANDARD STRATEGY"}
+
+${pastPreferences ? `PAST HIGH-RATED CONCEPTS (Use these as inspiration for the style/tone the user likes):\n- ${pastPreferences}` : ""}
 
 TASK:
 1. Parse the USER BRIEF to identify the BRAND, CATEGORY, and the core TENSION/INSIGHT.
@@ -363,6 +377,105 @@ Think D&AD. Think Cannes.`,
     }
   };
 
+  const generateStoryboarder = async () => {
+    if (!storyboarderInput.trim() && storyboarderImages.length === 0) return;
+    setIsGeneratingStoryboarder(true);
+    setError(null);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      const contents: any[] = [
+        `TASK: Generate a 4-frame storyboard based on the following input.
+        INPUT: ${storyboarderInput}
+        
+        For each frame, provide:
+        - frame_description: A detailed visual description for AI image generation.
+        - annotation: Director's notes (camera, sound, text).`
+      ];
+
+      // Add images as context if available
+      for (const img of storyboarderImages) {
+        contents.push({
+          inlineData: {
+            data: img.split(',')[1],
+            mimeType: "image/jpeg"
+          }
+        });
+      }
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: { parts: contents.map(c => typeof c === 'string' ? { text: c } : c) },
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              frames: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    frame_description: { type: Type.STRING },
+                    annotation: { type: Type.STRING }
+                  },
+                  required: ["frame_description", "annotation"]
+                }
+              }
+            },
+            required: ["frames"]
+          }
+        }
+      });
+
+      const parsed = JSON.parse(response.text || "{}");
+      const frames = parsed.frames || [];
+      
+      // Now visualize each frame
+      const visualizedFrames = await Promise.all(frames.map(async (frame: any) => {
+        try {
+          const imgResponse = await ai.models.generateContent({
+            model: "gemini-2.5-flash-image",
+            contents: `Storyboard frame: ${frame.frame_description}. Cinematic, professional storyboard sketch style.`,
+            config: {
+              imageConfig: { aspectRatio: "16:9" }
+            }
+          });
+          
+          const imgPart = imgResponse.candidates?.[0]?.content?.parts.find(p => p.inlineData);
+          return {
+            ...frame,
+            visual_url: imgPart ? `data:image/png;base64,${imgPart.inlineData.data}` : undefined
+          };
+        } catch (e) {
+          console.error("Frame visualization failed", e);
+          return frame;
+        }
+      }));
+
+      setStoryboarderFrames(visualizedFrames);
+    } catch (e) {
+      console.error(e);
+      setError("Storyboard generation failed. The artist is on a coffee break.");
+    } finally {
+      setIsGeneratingStoryboarder(false);
+    }
+  };
+
+  const handleStoryboardImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setStoryboarderImages(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
   const fetchTrends = async () => {
     setError(null);
     setView("loading");
@@ -388,10 +501,9 @@ Think D&AD. Think Cannes.`,
                     emotional_undercurrent: { type: Type.STRING },
                     brief_starter: { type: Type.STRING },
                     viral_concept: { type: Type.STRING },
-                    video_hook: { type: Type.STRING },
-                    ai_execution_methods: { type: Type.STRING }
+                    video_hook: { type: Type.STRING }
                   },
-                  required: ["name", "why_it_matters", "emotional_undercurrent", "brief_starter", "viral_concept", "video_hook", "ai_execution_methods"]
+                  required: ["name", "why_it_matters", "emotional_undercurrent", "brief_starter", "viral_concept", "video_hook"]
                 }
               }
             },
@@ -759,6 +871,78 @@ Think D&AD. Think Cannes.`,
     }
   };
 
+  const rateConcept = (index: number, rating: number) => {
+    if (!results) return;
+    const newConcepts = [...results.concepts];
+    newConcepts[index] = { ...newConcepts[index], rating };
+    setResults({ ...results, concepts: newConcepts });
+
+    // Store for future generations
+    setPastRatings(prev => {
+      const existing = prev.findIndex(p => p.concept === newConcepts[index].name);
+      if (existing !== -1) {
+        const updated = [...prev];
+        updated[existing] = { concept: newConcepts[index].name, rating };
+        return updated;
+      }
+      return [...prev, { concept: newConcepts[index].name, rating }];
+    });
+  };
+
+  const generateVariations = async (index: number) => {
+    if (!results) return;
+    const concept = results.concepts[index];
+    setIsGeneratingVariations(index);
+    setError(null);
+
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: `CORE CONCEPT: ${concept.name}
+IDEA: ${concept.idea}
+EXECUTION: ${concept.execution}
+
+TASK: Generate 3 variations of this concept. Each variation should explore a slightly different angle, tone, or execution style while keeping the core insight intact.
+
+Return as JSON matching the Concept schema (without visual_url, storyboard, etc. for now).`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                name: { type: Type.STRING },
+                title_options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                idea: { type: Type.STRING },
+                format: { type: Type.STRING },
+                execution: { type: Type.STRING },
+                why_it_works: { type: Type.STRING },
+                reference_energy: { type: Type.STRING },
+                risk_level: { type: Type.STRING, enum: ["safe", "brave", "dangerous"] },
+                risk_reason: { type: Type.STRING },
+                producibility: { type: Type.STRING },
+                ai_visual_prompt: { type: Type.STRING }
+              },
+              required: ["name", "idea", "execution", "why_it_works", "ai_visual_prompt"]
+            }
+          }
+        }
+      });
+
+      const variations = JSON.parse(response.text);
+      const newConcepts = [...results.concepts];
+      newConcepts[index] = { ...concept, variations };
+      setResults({ ...results, concepts: newConcepts });
+    } catch (e) {
+      console.error(e);
+      setError("Failed to generate variations. The creative team is stuck in a meeting.");
+    } finally {
+      setIsGeneratingVariations(null);
+    }
+  };
+
   const visualizeVideo = async (index: number) => {
     if (!results) return;
     const concept = results.concepts[index];
@@ -868,6 +1052,7 @@ Think D&AD. Think Cannes.`,
             {[
               { id: "input", label: "Creative Engine", icon: Zap },
               { id: "trends", label: "Trend Scanner", icon: Search, action: fetchTrends },
+              { id: "storyboarder", label: "Auto Storyboarder", icon: Layout },
               { id: "prompt", label: "Prompt DNA", icon: Code },
             ].map((item) => (
               <button
@@ -1171,31 +1356,58 @@ Think D&AD. Think Cannes.`,
                     </button>
                   )}
                 </div>
-                {results.concepts.map((concept, idx) => (
-                  <ConceptCard 
-                    key={idx}
-                    index={idx}
-                    concept={concept}
-                    isExpanded={expandedConcept === idx}
-                    isSelected={selectedConcepts.includes(idx)}
-                    onToggle={() => setExpandedConcept(expandedConcept === idx ? null : idx)}
-                    onCompare={() => {
-                      if (selectedConcepts.includes(idx)) {
-                        setSelectedConcepts(selectedConcepts.filter(i => i !== idx));
-                      } else if (selectedConcepts.length < 3) {
-                        setSelectedConcepts([...selectedConcepts, idx]);
-                      }
-                    }}
-                    onRefine={(feedback) => refineConcept(idx, feedback)}
-                    onVisualize={() => visualizeConcept(idx)}
-                    onVisualizeVideo={() => visualizeVideo(idx)}
-                    onVisualizeStoryboard={() => visualizeStoryboard(idx)}
-                    onGenerateBackground={() => generateBackground(idx)}
-                    onSelectTitle={(title) => selectTitle(idx, title)}
-                    onExportPDF={() => exportConceptToPDF(idx)}
-                    onCopy={copyToClipboard}
-                  />
-                ))}
+                {/* Rating Filter */}
+                <div className="flex items-center gap-4 mb-8 px-2">
+                  <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Filter by Rating:</span>
+                  <div className="flex gap-1">
+                    {[0, 3, 4, 5].map((stars) => (
+                      <button
+                        key={stars}
+                        onClick={() => setFilterRating(stars)}
+                        className={cn(
+                          "px-3 py-1 font-mono text-[10px] border transition-all",
+                          filterRating === stars 
+                            ? "bg-white text-black border-white" 
+                            : "text-zinc-500 border-zinc-800 hover:border-zinc-600"
+                        )}
+                      >
+                        {stars === 0 ? "ALL" : `${stars}+ STARS`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {results.concepts.map((concept, idx) => {
+                  if (filterRating && (concept.rating || 0) < filterRating) return null;
+                  return (
+                    <ConceptCard 
+                      key={idx}
+                      index={idx}
+                      concept={concept}
+                      isExpanded={expandedConcept === idx}
+                      isSelected={selectedConcepts.includes(idx)}
+                      onToggle={() => setExpandedConcept(expandedConcept === idx ? null : idx)}
+                      onCompare={() => {
+                        if (selectedConcepts.includes(idx)) {
+                          setSelectedConcepts(selectedConcepts.filter(i => i !== idx));
+                        } else if (selectedConcepts.length < 3) {
+                          setSelectedConcepts([...selectedConcepts, idx]);
+                        }
+                      }}
+                      onRefine={(feedback) => refineConcept(idx, feedback)}
+                      onVisualize={() => visualizeConcept(idx)}
+                      onVisualizeVideo={() => visualizeVideo(idx)}
+                      onVisualizeStoryboard={() => visualizeStoryboard(idx)}
+                      onGenerateBackground={() => generateBackground(idx)}
+                      onSelectTitle={(title) => selectTitle(idx, title)}
+                      onExportPDF={() => exportConceptToPDF(idx)}
+                      onCopy={copyToClipboard}
+                      onRate={(rating) => rateConcept(idx, rating)}
+                      onGenerateVariations={() => generateVariations(idx)}
+                      isGeneratingVariations={isGeneratingVariations === idx}
+                    />
+                  );
+                })}
               </div>
 
               <AnimatePresence>
@@ -1289,17 +1501,115 @@ Think D&AD. Think Cannes.`,
                         </div>
                         <p className="font-mono text-xs text-zinc-400 italic">"{trend.video_hook}"</p>
                       </div>
-                      <div className="space-y-1 pt-2 border-t border-white/5">
-                        <div className="flex items-center gap-2 text-emerald-400">
-                          <Code size={12} />
-                          <span className="font-mono text-[10px] uppercase tracking-widest">AI Execution Strategy</span>
-                        </div>
-                        <p className="text-xs text-zinc-400 leading-relaxed">{trend.ai_execution_methods}</p>
-                      </div>
                     </div>
                   </motion.div>
                 ))}
               </div>
+            </motion.div>
+          )}
+
+          {/* STORYBOARDER VIEW */}
+          {view === "storyboarder" && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-12"
+            >
+              <div className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-10 space-y-8">
+                <div className="space-y-2">
+                  <h2 className="font-display text-3xl text-white italic">Auto Storyboarder</h2>
+                  <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Turn scripts or images into visual narratives</p>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">The Script / Story</label>
+                    <textarea 
+                      value={storyboarderInput}
+                      onChange={(e) => setStoryboarderInput(e.target.value)}
+                      placeholder="Describe the scene, the action, or paste a script snippet..."
+                      className="w-full bg-black/50 border border-zinc-800 p-6 text-white font-display text-xl focus:border-white focus:outline-none transition-all min-h-[200px] resize-none"
+                    />
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Reference Images (Optional)</label>
+                      <label className="cursor-pointer font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2">
+                        <Plus size={12} />
+                        Upload
+                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleStoryboardImageUpload} />
+                      </label>
+                    </div>
+                    
+                    {storyboarderImages.length > 0 && (
+                      <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
+                        {storyboarderImages.map((img, i) => (
+                          <div key={i} className="relative aspect-square bg-zinc-800 border border-zinc-700 group">
+                            <img src={img} className="w-full h-full object-cover" />
+                            <button 
+                              onClick={() => setStoryboarderImages(prev => prev.filter((_, idx) => idx !== i))}
+                              className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X size={10} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={generateStoryboarder}
+                    disabled={isGeneratingStoryboarder || (!storyboarderInput.trim() && storyboarderImages.length === 0)}
+                    className="w-full py-6 bg-white text-black font-display italic text-2xl hover:bg-zinc-200 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-4"
+                  >
+                    {isGeneratingStoryboarder ? (
+                      <>
+                        <RefreshCcw size={24} className="animate-spin" />
+                        Directing...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles size={24} />
+                        Generate Storyboard
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {storyboarderFrames.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {storyboarderFrames.map((frame, i) => (
+                    <motion.div 
+                      key={i}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.1 }}
+                      className="space-y-4"
+                    >
+                      <div className="relative aspect-video bg-zinc-950 border border-zinc-800 overflow-hidden group">
+                        {frame.visual_url ? (
+                          <img src={frame.visual_url} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-zinc-800 font-mono text-[10px] uppercase tracking-widest">
+                            Frame 0{i+1}
+                          </div>
+                        )}
+                        <div className="absolute top-4 left-4 bg-black/80 px-3 py-1 font-mono text-xs text-white border border-white/10">0{i+1}</div>
+                      </div>
+                      <div className="space-y-2 p-4 bg-zinc-900/30 border border-zinc-800">
+                        <p className="text-sm text-zinc-200 leading-relaxed font-medium">{frame.frame_description}</p>
+                        <div className="flex gap-2 items-start pt-2 border-t border-zinc-800/50">
+                          <div className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest pt-0.5 shrink-0">Director's Note:</div>
+                          <p className="text-[10px] text-zinc-500 italic leading-relaxed">{frame.annotation}</p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 
@@ -1387,7 +1697,10 @@ function ConceptCard({
   onGenerateBackground,
   onSelectTitle,
   onExportPDF,
-  onCopy
+  onCopy,
+  onRate,
+  onGenerateVariations,
+  isGeneratingVariations
 }: { 
   concept: Concept; 
   index: number; 
@@ -1403,6 +1716,9 @@ function ConceptCard({
   onSelectTitle: (title: string) => void;
   onExportPDF: () => void;
   onCopy: (text: string) => void;
+  onRate: (rating: number) => void;
+  onGenerateVariations: () => Promise<void>;
+  isGeneratingVariations: boolean;
 }) {
   const [refineInput, setRefineInput] = useState("");
   const [isRefining, setIsRefining] = useState(false);
@@ -1474,8 +1790,19 @@ function ConceptCard({
             <h3 className="font-display text-2xl text-white group-hover:translate-x-1 transition-transform">
               {concept.selected_title || concept.name}
             </h3>
-            <div className="hidden md:block">
+            <div className="hidden md:flex items-center gap-4">
               <RiskBadge level={concept.risk_level} />
+              {concept.rating && (
+                <div className="flex gap-0.5">
+                  {[...Array(5)].map((_, i) => (
+                    <Zap 
+                      key={i} 
+                      size={10} 
+                      className={cn(i < concept.rating! ? "text-yellow-400 fill-yellow-400" : "text-zinc-800")} 
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
           <div className="text-zinc-700 group-hover:text-zinc-400 transition-colors">
@@ -1493,11 +1820,62 @@ function ConceptCard({
             className="px-8 pb-10 border-t border-zinc-800/50"
           >
             <div className="pt-8 space-y-8">
+              {concept.variations && concept.variations.length > 0 && (
+                <div className="space-y-6 p-6 bg-zinc-950 border border-zinc-800">
+                  <div className="flex items-center gap-2">
+                    <RefreshCcw size={12} className="text-cyan-400" />
+                    <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Alternative Angles / Variations</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {concept.variations.map((v, i) => (
+                      <div key={i} className="space-y-3 group/var">
+                        <h5 className="font-display text-lg text-white group-hover/var:text-cyan-400 transition-colors">{v.name}</h5>
+                        <p className="text-[11px] text-zinc-500 leading-relaxed line-clamp-3">{v.idea}</p>
+                        <div className="pt-2">
+                          <RiskBadge level={v.risk_level} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
                 <p className="font-display italic text-2xl text-white leading-tight max-w-2xl">
                   {concept.idea}
                 </p>
                 <div className="flex flex-wrap gap-2 shrink-0">
+                  <div className="flex items-center gap-2 px-4 py-2 border border-zinc-800">
+                    <span className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest">Rate:</span>
+                    <div className="flex gap-1">
+                      {[1, 2, 3, 4, 5].map((star) => (
+                        <button
+                          key={star}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRate(star);
+                          }}
+                          className="transition-transform hover:scale-125"
+                        >
+                          <Zap 
+                            size={12} 
+                            className={cn(
+                              star <= (concept.rating || 0) 
+                                ? "text-yellow-400 fill-yellow-400" 
+                                : "text-zinc-700 hover:text-zinc-500"
+                            )} 
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={onGenerateVariations}
+                    disabled={isGeneratingVariations}
+                    className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                  >
+                    <RefreshCcw size={12} className={isGeneratingVariations ? "animate-spin" : ""} />
+                    {isGeneratingVariations ? "Exploring Angles..." : "Generate Variations"}
+                  </button>
                   <button
                     onClick={handleVisualize}
                     disabled={isVisualizing || !!concept.visual_url}
