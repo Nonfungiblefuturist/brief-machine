@@ -116,14 +116,14 @@ USER FEEDBACK:
 
 Provide the refined concept in the same JSON format as the original.`;
 
-const TREND_PROMPT = `You are a cultural intelligence analyst. Scan for the most potent cultural tensions, trends, and undercurrents shaping advertising in 2025-2026. Focus on what's USEFUL for generating ad concepts — not just what's trending.
+const TREND_PROMPT = `You are a cultural intelligence analyst specializing in AI-native creativity. Scan for the most potent cultural tensions, trends, and undercurrents shaping advertising in 2025-2026, specifically focusing on ideas that DEMAND AI-generated video execution (Surrealism, impossible physics, dream-logic).
 
 For each trend, provide:
 - The trend/tension name
 - Why it matters for brands RIGHT NOW  
 - The emotional undercurrent (what people FEEL about this)
-- A "brief starter" — a provocative question a brand could build a campaign around
-- A "viral_concept" — A specific, high-impact idea for a video or stunt that leverages this trend. It should be designed for shareability.
+- A "brief starter" — a provocative question a brand could build a campaign around, specifically for an AI-generated video.
+- A "viral_concept" — A specific, high-impact idea for an AI-generated video that leverages this trend. It should be designed for shareability and visual awe.
 - A "video_hook" — A 3-second hook for social media (TikTok/Reels) to grab attention immediately.`;
 
 // --- Types ---
@@ -450,6 +450,15 @@ Think D&AD. Think Cannes.`,
     setStoryboarderFrames(prev => prev.filter((_, i) => i !== index));
   };
 
+  const duplicateStoryboardFrame = (index: number) => {
+    setStoryboarderFrames(prev => {
+      const next = [...prev];
+      const duplicatedFrame = { ...next[index] };
+      next.splice(index + 1, 0, duplicatedFrame);
+      return next;
+    });
+  };
+
   const clearStoryboard = () => {
     setStoryboarderFrames([]);
     setStoryboarderInput("");
@@ -458,6 +467,13 @@ Think D&AD. Think Cannes.`,
     setIsGeneratingStoryboarder(false);
     setIsGeneratingIndividualFrame(null);
     setIsExporting(false);
+  };
+
+  const sendConceptToStoryboarder = (concept: Concept) => {
+    setStoryboarderInput(`${concept.idea}\n\nExecution: ${concept.execution}\n\nFormat: ${concept.format}`);
+    setStoryboarderProjectName(concept.selected_title || concept.name);
+    setStoryboarderFrames([]);
+    setView("storyboarder");
   };
 
   const updateStoryboardFrame = (index: number, updates: Partial<StoryboardFrame>) => {
@@ -1509,6 +1525,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       onCopy={copyToClipboard}
                       onRate={(rating) => rateConcept(idx, rating)}
                       onGenerateVariations={() => generateVariations(idx)}
+                      onSendToStoryboarder={() => sendConceptToStoryboarder(concept)}
                       isGeneratingVariations={isGeneratingVariations === idx}
                     />
                   );
@@ -1583,29 +1600,31 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     </div>
                     <p className="text-sm text-zinc-400 mb-6 leading-relaxed">{trend.why_it_matters}</p>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-zinc-800/50">
-                      <DetailBlock label="Emotional Undercurrent" value={trend.emotional_undercurrent} />
-                      <div className="space-y-1">
-                        <span className="font-mono text-[10px] text-red-500 uppercase tracking-widest">Brief Starter</span>
-                        <p className="font-display italic text-lg text-zinc-200 leading-tight">"{trend.brief_starter}"</p>
-                      </div>
-                    </div>
-
-                    <div className="mt-6 p-4 bg-white/5 border border-white/10 space-y-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-cyan-400">
-                          <Sparkles size={12} />
-                          <span className="font-mono text-[10px] uppercase tracking-widest">Viral Concept</span>
-                        </div>
-                        <p className="text-sm text-zinc-200 leading-relaxed">{trend.viral_concept}</p>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-purple-400">
-                          <Zap size={12} />
-                          <span className="font-mono text-[10px] uppercase tracking-widest">3s Video Hook</span>
-                        </div>
-                        <p className="font-mono text-xs text-zinc-400 italic">"{trend.video_hook}"</p>
-                      </div>
+                    <div className="mt-6 flex flex-wrap gap-3 pt-6 border-t border-zinc-800/50">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBriefInput(trend.viral_concept);
+                          setView("input");
+                        }}
+                        className="px-4 py-2 bg-white text-black font-mono text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center gap-2"
+                      >
+                        <Zap size={12} />
+                        Send to Creative Engine
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setStoryboarderInput(trend.viral_concept);
+                          setStoryboarderProjectName(trend.name);
+                          setStoryboarderFrames([]);
+                          setView("storyboarder");
+                        }}
+                        className="px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 font-mono text-[10px] uppercase tracking-widest transition-all flex items-center gap-2"
+                      >
+                        <Layout size={12} />
+                        Auto Storyboard
+                      </button>
                     </div>
                   </motion.div>
                 ))}
@@ -1782,6 +1801,13 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                               </button>
                             )}
                             <button 
+                              onClick={() => duplicateStoryboardFrame(i)}
+                              className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ffffff] hover:text-[#000000] transition-all"
+                              title="Duplicate Shot"
+                            >
+                              <Copy size={14} />
+                            </button>
+                            <button 
                               onClick={() => removeStoryboardFrame(i)}
                               className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ef4444] transition-all"
                               title="Remove Shot"
@@ -1918,6 +1944,7 @@ function ConceptCard({
   onCopy,
   onRate,
   onGenerateVariations,
+  onSendToStoryboarder,
   isGeneratingVariations
 }: { 
   concept: Concept; 
@@ -1936,6 +1963,7 @@ function ConceptCard({
   onCopy: (text: string) => void;
   onRate: (rating: number) => void;
   onGenerateVariations: () => Promise<void>;
+  onSendToStoryboarder: () => void;
   isGeneratingVariations: boolean;
 }) {
   const [refineInput, setRefineInput] = useState("");
@@ -2131,6 +2159,13 @@ function ConceptCard({
                   >
                     <Download size={12} />
                     Export PDF
+                  </button>
+                  <button
+                    onClick={onSendToStoryboarder}
+                    className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                  >
+                    <Layout size={12} />
+                    Send to Storyboarder
                   </button>
                 </div>
               </div>
