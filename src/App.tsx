@@ -12,6 +12,7 @@ declare global {
 import { motion, AnimatePresence } from "motion/react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
+import JSZip from "jszip";
 import { 
   Plus, 
   Minus, 
@@ -37,7 +38,9 @@ import {
   Folder,
   FolderOpen,
   ExternalLink,
-  Save
+  Save,
+  Film,
+  FileImage
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -318,6 +321,11 @@ export default function App() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [selectedTrend, setSelectedTrend] = useState<Trend | null>(null);
   const [isFetchingMoreTrends, setIsFetchingMoreTrends] = useState(false);
+  const [videoAspectRatio, setVideoAspectRatio] = useState<"16:9" | "9:16">("16:9");
+  const [isExportingImages, setIsExportingImages] = useState(false);
+  const [isExportingVideo, setIsExportingVideo] = useState(false);
+  const [refiningFrameIndex, setRefiningFrameIndex] = useState<number | null>(null);
+  const [refinementFeedback, setRefinementFeedback] = useState("");
 
   // Auto-save Storyboard Draft
   useEffect(() => {
@@ -644,16 +652,119 @@ Think D&AD. Think Cannes.`,
     }
   };
 
-  const generateIndividualFrame = async (index: number) => {
+  const exportStoryboardImages = async () => {
+    if (storyboarderFrames.length === 0) return;
+    setIsExportingImages(true);
+    try {
+      const zip = new JSZip();
+      const safeName = storyboarderProjectName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      
+      for (let i = 0; i < storyboarderFrames.length; i++) {
+        const frame = storyboarderFrames[i];
+        if (frame.visual_url) {
+          const base64Data = frame.visual_url.split(',')[1];
+          zip.file(`frame-${i + 1}.png`, base64Data, { base64: true });
+        }
+      }
+      
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(content);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${safeName}-images-${Date.now()}.zip`;
+      link.click();
+    } catch (e) {
+      console.error("Image export failed", e);
+      setError("Failed to export images.");
+    } finally {
+      setIsExportingImages(false);
+    }
+  };
+
+  const exportStoryboardVideo = async () => {
+    if (storyboarderFrames.length === 0) return;
+    setIsExportingVideo(true);
+    try {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error("Could not get canvas context");
+
+      // Use 16:9 aspect ratio for video export
+      canvas.width = 1280;
+      canvas.height = 720;
+
+      const stream = canvas.captureStream(30);
+      const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => chunks.push(e.data);
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const safeName = storyboarderProjectName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+        link.download = `${safeName}-video-${Date.now()}.webm`;
+        link.click();
+      };
+
+      recorder.start();
+
+      for (let i = 0; i < storyboarderFrames.length; i++) {
+        const frame = storyboarderFrames[i];
+        if (frame.visual_url) {
+          const img = new Image();
+          img.src = frame.visual_url;
+          await new Promise((resolve) => {
+            img.onload = () => {
+              // Draw black background
+              ctx.fillStyle = '#000000';
+              ctx.fillRect(0, 0, canvas.width, canvas.height);
+              
+              // Draw image centered and scaled to fit
+              const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
+              const x = (canvas.width / 2) - (img.width / 2) * scale;
+              const y = (canvas.height / 2) - (img.height / 2) * scale;
+              ctx.drawImage(img, x, y, img.width * scale, img.height * scale);
+              
+              // Draw frame number
+              ctx.fillStyle = 'rgba(0,0,0,0.5)';
+              ctx.fillRect(20, 20, 100, 40);
+              ctx.fillStyle = '#ffffff';
+              ctx.font = 'bold 20px monospace';
+              ctx.fillText(`SHOT 0${i + 1}`, 30, 48);
+              
+              resolve(null);
+            };
+          });
+          // Show each frame for 2 seconds
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      recorder.stop();
+    } catch (e) {
+      console.error("Video export failed", e);
+      setError("Failed to export video. Your browser might not support MediaRecorder.");
+    } finally {
+      setIsExportingVideo(false);
+    }
+  };
+
+  const generateIndividualFrame = async (index: number, feedback?: string) => {
     const frame = storyboarderFrames[index];
     if (!frame.frame_description) return;
     
     setIsGeneratingIndividualFrame(index);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = feedback 
+        ? `Refine this storyboard frame: ${frame.frame_description}. User feedback: ${feedback}. Maintain the cinematic, professional storyboard sketch style.`
+        : `Storyboard frame: ${frame.frame_description}. Cinematic, professional storyboard sketch style.`;
+
       const imgResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash-image",
-        contents: `Storyboard frame: ${frame.frame_description}. Cinematic, professional storyboard sketch style.`,
+        contents: prompt,
         config: {
           imageConfig: { aspectRatio: "16:9" }
         }
@@ -670,6 +781,8 @@ Think D&AD. Think Cannes.`,
       setError("Frame visualization failed.");
     } finally {
       setIsGeneratingIndividualFrame(null);
+      setRefiningFrameIndex(null);
+      setRefinementFeedback("");
     }
   };
 
@@ -1396,7 +1509,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
         config: {
           numberOfVideos: 1,
           resolution: '720p',
-          aspectRatio: '16:9'
+          aspectRatio: videoAspectRatio
         }
       });
 
@@ -1879,6 +1992,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       onGenerateVariations={() => generateVariations(idx)}
                       onSendToStoryboarder={() => sendConceptToStoryboarder(concept)}
                       isGeneratingVariations={isGeneratingVariations === idx}
+                      videoAspectRatio={videoAspectRatio}
+                      onSetVideoAspectRatio={setVideoAspectRatio}
                     />
                   );
                 })}
@@ -2059,6 +2174,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   setView("storyboarder");
                   setSelectedTrend(null);
                 }}
+                videoAspectRatio={videoAspectRatio}
+                onSetVideoAspectRatio={setVideoAspectRatio}
               />
             )}
           </AnimatePresence>
@@ -2170,6 +2287,22 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         Export PDF
                       </button>
                       <button 
+                        onClick={exportStoryboardImages}
+                        disabled={isExportingImages}
+                        className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                      >
+                        {isExportingImages ? <RefreshCcw size={12} className="animate-spin" /> : <FileImage size={12} />}
+                        Export Images (ZIP)
+                      </button>
+                      <button 
+                        onClick={exportStoryboardVideo}
+                        disabled={isExportingVideo}
+                        className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                      >
+                        {isExportingVideo ? <RefreshCcw size={12} className="animate-spin" /> : <Film size={12} />}
+                        Export Video (WebM)
+                      </button>
+                      <button 
                         onClick={addStoryboardFrame}
                         className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
                       >
@@ -2232,14 +2365,15 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           
                           <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity" data-html2canvas-ignore="true">
                             {frame.visual_url && (
-                              <button 
-                                onClick={() => generateIndividualFrame(i)}
-                                disabled={isGeneratingIndividualFrame === i}
-                                className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ffffff] hover:text-[#000000] transition-all"
-                                title="Regenerate Image"
-                              >
-                                <RefreshCcw size={14} className={isGeneratingIndividualFrame === i ? "animate-spin" : ""} />
-                              </button>
+                              <>
+                                <button 
+                                  onClick={() => setRefiningFrameIndex(refiningFrameIndex === i ? null : i)}
+                                  className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ffffff] hover:text-[#000000] transition-all"
+                                  title="Refine Image"
+                                >
+                                  <RefreshCcw size={14} className={isGeneratingIndividualFrame === i ? "animate-spin" : ""} />
+                                </button>
+                              </>
                             )}
                             <button 
                               onClick={() => duplicateStoryboardFrame(i)}
@@ -2259,6 +2393,34 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         </div>
                         
                         <div className="space-y-4 p-6 bg-[rgba(24,24,27,0.3)] border border-[#27272a]">
+                          {refiningFrameIndex === i && (
+                            <motion.div 
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              className="pb-4 space-y-3 border-b border-[rgba(39,39,42,0.5)] mb-4"
+                            >
+                              <label className="font-mono text-[9px] text-cyan-500 uppercase tracking-widest">Refinement Feedback</label>
+                              <div className="flex gap-2">
+                                <input 
+                                  type="text"
+                                  value={refinementFeedback}
+                                  onChange={(e) => setRefinementFeedback(e.target.value)}
+                                  placeholder="e.g., 'Make it more moody', 'Add a red car'..."
+                                  className="flex-1 bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white focus:ring-1 focus:ring-cyan-500 outline-none"
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') generateIndividualFrame(i, refinementFeedback);
+                                  }}
+                                />
+                                <button
+                                  onClick={() => generateIndividualFrame(i, refinementFeedback)}
+                                  disabled={isGeneratingIndividualFrame === i || !refinementFeedback.trim()}
+                                  className="px-4 py-2 bg-cyan-600 text-white font-mono text-[9px] uppercase tracking-widest hover:bg-cyan-500 transition-all disabled:opacity-50"
+                                >
+                                  Apply
+                                </button>
+                              </div>
+                            </motion.div>
+                          )}
                           <div className="space-y-2">
                             <label className="font-mono text-[9px] text-[#52525b] uppercase tracking-widest">Visual Description</label>
                             <textarea 
@@ -2423,13 +2585,62 @@ function TrendDetailModal({
   trend, 
   onClose, 
   onSendToEngine, 
-  onSendToStoryboarder 
+  onSendToStoryboarder,
+  videoAspectRatio,
+  onSetVideoAspectRatio
 }: { 
   trend: Trend; 
   onClose: () => void;
   onSendToEngine: (concept: string) => void;
   onSendToStoryboarder: (concept: string, name: string) => void;
+  videoAspectRatio: "16:9" | "9:16";
+  onSetVideoAspectRatio: (ratio: "16:9" | "9:16") => void;
 }) {
+  const [isVisualizingVideo, setIsVisualizingVideo] = useState(false);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleVisualizeVideo = async () => {
+    setIsVisualizingVideo(true);
+    setError(null);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      let operation = await ai.models.generateVideos({
+        model: 'veo-3.1-lite-generate-preview',
+        prompt: `A high-end, award-winning advertising video snippet inspired by the cultural trend "${trend.name}". 
+        Viral Concept: ${trend.viral_concept}. 
+        Video Hook: ${trend.video_hook}.
+        Cinematic, surreal, and visually arresting. 
+        High-end production value, professional lighting.`,
+        config: {
+          numberOfVideos: 1,
+          resolution: '720p',
+          aspectRatio: videoAspectRatio
+        }
+      });
+
+      while (!operation.done) {
+        await new Promise(resolve => setTimeout(resolve, 10000));
+        operation = await ai.operations.getVideosOperation({ operation: operation });
+      }
+
+      const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
+      if (downloadLink) {
+        const response = await fetch(downloadLink, {
+          method: 'GET',
+          headers: { 'x-goog-api-key': process.env.GEMINI_API_KEY! },
+        });
+        const blob = await response.blob();
+        setVideoUrl(URL.createObjectURL(blob));
+      }
+    } catch (e) {
+      console.error(e);
+      setError("Video generation failed. Cultural tension is too high.");
+    } finally {
+      setIsVisualizingVideo(false);
+    }
+  };
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
@@ -2437,7 +2648,7 @@ function TrendDetailModal({
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl overflow-y-auto p-6 md:p-12 flex items-center justify-center"
     >
-      <div className="w-full max-w-4xl bg-zinc-900 border border-zinc-800 p-8 md:p-12 space-y-10 relative">
+      <div className="w-full max-w-5xl bg-zinc-900 border border-zinc-800 p-8 md:p-12 space-y-10 relative">
         <button 
           onClick={onClose}
           className="absolute top-6 right-6 text-zinc-500 hover:text-white transition-colors"
@@ -2450,26 +2661,85 @@ function TrendDetailModal({
           <h2 className="font-display text-5xl text-white italic leading-tight">{trend.name}</h2>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-          <div className="space-y-8">
-            <div className="space-y-2">
-              <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Why It Matters</label>
-              <p className="text-zinc-300 leading-relaxed">{trend.why_it_matters}</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+          <div className="lg:col-span-2 space-y-12">
+            <div className="space-y-6">
+              <h3 className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">The Cultural Undercurrent</h3>
+              <p className="font-display text-3xl text-zinc-300 leading-tight italic">"{trend.why_it_matters}"</p>
+              <p className="text-zinc-500 leading-relaxed italic">"{trend.emotional_undercurrent}"</p>
             </div>
-            <div className="space-y-2">
-              <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Emotional Undercurrent</label>
-              <p className="text-zinc-400 italic leading-relaxed">"{trend.emotional_undercurrent}"</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-12 pt-12 border-t border-zinc-800">
+              <div className="space-y-4">
+                <h3 className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest flex items-center gap-2">
+                  <Zap size={12} className="text-yellow-400" />
+                  Viral Concept
+                </h3>
+                <p className="text-white leading-relaxed">{trend.viral_concept}</p>
+              </div>
+              <div className="space-y-4">
+                <h3 className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest flex items-center gap-2">
+                  <Target size={12} className="text-cyan-400" />
+                  Video Hook
+                </h3>
+                <p className="text-white leading-relaxed italic">"{trend.video_hook}"</p>
+              </div>
             </div>
           </div>
 
           <div className="space-y-8 bg-black/30 p-8 border border-zinc-800/50">
-            <div className="space-y-2">
-              <label className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Viral Concept</label>
-              <p className="text-white font-display text-xl italic leading-relaxed">{trend.viral_concept}</p>
-            </div>
-            <div className="space-y-2">
-              <label className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Video Hook</label>
-              <p className="text-zinc-400 font-mono text-xs leading-relaxed">{trend.video_hook}</p>
+            <h3 className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">AI Visualization</h3>
+            
+            <div className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Aspect Ratio</span>
+                <div className="flex gap-2">
+                  {(["16:9", "9:16"] as const).map((ratio) => (
+                    <button
+                      key={ratio}
+                      onClick={() => onSetVideoAspectRatio(ratio)}
+                      className={cn(
+                        "px-3 py-1 font-mono text-[10px] uppercase tracking-widest transition-all",
+                        videoAspectRatio === ratio 
+                          ? "bg-white text-black" 
+                          : "bg-zinc-800 text-zinc-500 hover:text-white"
+                      )}
+                    >
+                      {ratio}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className={cn(
+                "relative bg-black border border-zinc-800 overflow-hidden flex items-center justify-center",
+                videoAspectRatio === "16:9" ? "aspect-video" : "aspect-[9/16] max-h-[400px] mx-auto"
+              )}>
+                {videoUrl ? (
+                  <video src={videoUrl} controls className="w-full h-full object-cover" />
+                ) : isVisualizingVideo ? (
+                  <div className="flex flex-col items-center gap-4">
+                    <RefreshCcw size={24} className="text-zinc-700 animate-spin" />
+                    <span className="font-mono text-[10px] text-zinc-700 uppercase tracking-widest animate-pulse">Rendering Reality...</span>
+                  </div>
+                ) : (
+                  <div className="text-center p-6 space-y-4">
+                    <Film size={32} className="text-zinc-800 mx-auto" />
+                    <p className="font-mono text-[10px] text-zinc-700 uppercase tracking-widest">No visualization yet</p>
+                    <button
+                      onClick={handleVisualizeVideo}
+                      className="px-6 py-3 bg-zinc-800 text-zinc-400 hover:bg-white hover:text-black font-mono text-[10px] uppercase tracking-widest transition-all"
+                    >
+                      Visualize Trend
+                    </button>
+                  </div>
+                )}
+                {error && (
+                  <div className="absolute inset-0 bg-black/80 flex items-center justify-center p-6 text-center">
+                    <p className="text-red-500 font-mono text-[10px] uppercase tracking-widest">{error}</p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -2682,7 +2952,9 @@ function ConceptCard({
   onRate,
   onGenerateVariations,
   onSendToStoryboarder,
-  isGeneratingVariations
+  isGeneratingVariations,
+  videoAspectRatio,
+  onSetVideoAspectRatio
 }: { 
   concept: Concept; 
   index: number; 
@@ -2702,6 +2974,8 @@ function ConceptCard({
   onGenerateVariations: () => Promise<void>;
   onSendToStoryboarder: () => void;
   isGeneratingVariations: boolean;
+  videoAspectRatio: "16:9" | "9:16";
+  onSetVideoAspectRatio: (ratio: "16:9" | "9:16") => void;
 }) {
   const [refineInput, setRefineInput] = useState("");
   const [isRefining, setIsRefining] = useState(false);
@@ -2867,6 +3141,28 @@ function ConceptCard({
                     <Sparkles size={12} className={isVisualizing ? "animate-pulse" : ""} />
                     {isVisualizing ? "Visualizing..." : concept.visual_url ? "Mood Board Ready" : "Mood Board"}
                   </button>
+                  <div className="flex items-center gap-2 px-4 py-2 border border-zinc-800">
+                    <span className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest">Aspect Ratio:</span>
+                    <div className="flex gap-2">
+                      {(["16:9", "9:16"] as const).map((ratio) => (
+                        <button
+                          key={ratio}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSetVideoAspectRatio(ratio);
+                          }}
+                          className={cn(
+                            "px-2 py-0.5 font-mono text-[9px] uppercase tracking-widest transition-all",
+                            videoAspectRatio === ratio 
+                              ? "bg-white text-black" 
+                              : "bg-zinc-900 text-zinc-500 hover:text-white"
+                          )}
+                        >
+                          {ratio}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <button
                     onClick={handleVisualizeVideo}
                     disabled={isVisualizingVideo || !!concept.visual_video_url}
