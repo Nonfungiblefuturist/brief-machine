@@ -31,7 +31,8 @@ import {
   ArrowLeft,
   Download,
   Image as ImageIcon,
-  Layout
+  Layout,
+  Trash2
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -447,6 +448,16 @@ Think D&AD. Think Cannes.`,
 
   const removeStoryboardFrame = (index: number) => {
     setStoryboarderFrames(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const clearStoryboard = () => {
+    setStoryboarderFrames([]);
+    setStoryboarderInput("");
+    setStoryboarderImages([]);
+    setStoryboarderProjectName("Untitled Project");
+    setIsGeneratingStoryboarder(false);
+    setIsGeneratingIndividualFrame(null);
+    setIsExporting(false);
   };
 
   const updateStoryboardFrame = (index: number, updates: Partial<StoryboardFrame>) => {
@@ -1704,6 +1715,13 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       >
                         <Plus size={12} />
                         Add Shot
+                      </button>
+                      <button 
+                        onClick={clearStoryboard}
+                        className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-red-900/30 text-red-500/50 hover:text-red-500 hover:border-red-500 transition-all flex items-center gap-2"
+                      >
+                        <Trash2 size={12} />
+                        Clear
                       </button>
                     </div>
                   </div>
