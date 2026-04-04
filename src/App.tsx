@@ -84,9 +84,32 @@ For each concept provide:
 - PRODUCIBILITY: Can this be made with AI tools + minimal budget? How?
 - AI VISUAL PROMPT: A highly detailed, professional prompt for an AI image generator (like Midjourney or DALL-E) that would perfectly capture the visual essence of this concept. Focus on lighting, texture, composition, and surreal elements.
 - SCRIPT SNIPPET: (For video formats) A brief, high-impact script snippet or dialogue that captures the tone and voice of the concept.
-- STORYBOARD: (For video formats) A sequence of 3-4 key frames. Each frame needs a "frame_description" (visual details) and an "annotation" (camera move, sound, or text overlay).
+- STORYBOARD: (For video formats) A sequence of 3-4 key frames. Each frame needs a "frame_description" (visual details), "annotation" (camera move, sound, or text overlay), "camera_angle", "lighting", and "atmosphere".
 
-4. CULTURAL HOOKS (based on current 2025-2026 landscape)
+4. HIGGSFIELD OPTIMIZATION (MANDATORY FOR ALL CONCEPTS)
+For every concept, generate a Higgsfield-ready configuration:
+- RECOMMENDED MODEL: Choose from Sora 2, Kling 3.0, Veo 3.1, Cinema Studio, or Click-to-Ad. 
+  - Social/Fast -> Kling
+  - Cinematic/Brand -> Cinema Studio
+  - Ad Remix -> Click-to-Ad
+- CAMERA PHYSICS: Specify camera body (e.g., ARRI Alexa LF, RED V-Raptor), lens type (e.g., Anamorphic, Prime), focal length (e.g., 35mm, 85mm), and up to 3 simultaneous movements (e.g., Dolly Push + Pan + Tilt).
+- PROMPT DNA: Structured as discrete fields:
+  - scene_description
+  - camera_movement
+  - lens_lighting_specs
+  - style_reference
+  - duration (e.g., "15s", "30s")
+- CREDIT ESTIMATE: Estimate the Higgsfield credit cost (Cinema Studio is high, Kling is medium).
+- SHOT BREAKDOWN: For the total duration, suggest a shot-by-shot breakdown (e.g., a 30s spot is 4-6 shots).
+
+5. CLICK-TO-AD INTEGRATION (ONLY FOR "AD REMIX" MODE)
+If the mode is "AD REMIX", provide:
+- product_url (placeholder if not known)
+- brand_intent (summary of the ad's goal)
+- visual_anchors (key visual elements to maintain)
+- target_platform (IG Reels, TikTok, YouTube Shorts)
+
+6. CULTURAL HOOKS (based on current 2025-2026 landscape)
 Tag each concept with 2-3 specific and niche cultural currents that are highly relevant to the idea, in addition to broader ones. For each hook, provide a brief (1-2 sentence) justification for its inclusion, explaining how the concept resonates with that specific cultural undercurrent.
 
 INSPIRATION MODES:
@@ -164,6 +187,12 @@ interface StoryboardFrame {
   camera_angle?: string;
   lighting?: string;
   atmosphere?: string;
+  higgsfield_specs?: {
+    camera_body: string;
+    lens: string;
+    focal_length: string;
+    movements: string[];
+  };
 }
 
 interface SavedProject {
@@ -200,6 +229,34 @@ interface Concept {
   storyboard?: StoryboardFrame[];
   rating?: number;
   variations?: Concept[];
+  higgsfield_config?: {
+    recommended_model: string;
+    camera_physics: {
+      body: string;
+      lens: string;
+      focal_length: string;
+      movements: string[];
+    };
+    prompt_dna: {
+      scene_description: string;
+      camera_movement: string;
+      lens_lighting_specs: string;
+      style_reference: string;
+      duration: string;
+    };
+    credit_estimate: number;
+    shot_breakdown: {
+      shot: number;
+      description: string;
+      duration: string;
+    }[];
+  };
+  click_to_ad_brief?: {
+    product_url: string;
+    brand_intent: string;
+    visual_anchors: string;
+    target_platform: string;
+  };
 }
 
 interface Results {
@@ -583,10 +640,67 @@ Think D&AD. Think Cannes.`,
                         type: Type.OBJECT,
                         properties: {
                           frame_description: { type: Type.STRING },
-                          annotation: { type: Type.STRING }
+                          annotation: { type: Type.STRING },
+                          camera_angle: { type: Type.STRING },
+                          lighting: { type: Type.STRING },
+                          atmosphere: { type: Type.STRING }
                         },
-                        required: ["frame_description", "annotation"]
+                        required: ["frame_description", "annotation", "camera_angle", "lighting", "atmosphere"]
                       }
+                    },
+                    higgsfield_config: {
+                      type: Type.OBJECT,
+                      properties: {
+                        recommended_model: { type: Type.STRING },
+                        camera_physics: {
+                          type: Type.OBJECT,
+                          properties: {
+                            body: { type: Type.STRING },
+                            lens: { type: Type.STRING },
+                            focal_length: { type: Type.STRING },
+                            movements: {
+                              type: Type.ARRAY,
+                              items: { type: Type.STRING }
+                            }
+                          },
+                          required: ["body", "lens", "focal_length", "movements"]
+                        },
+                        prompt_dna: {
+                          type: Type.OBJECT,
+                          properties: {
+                            scene_description: { type: Type.STRING },
+                            camera_movement: { type: Type.STRING },
+                            lens_lighting_specs: { type: Type.STRING },
+                            style_reference: { type: Type.STRING },
+                            duration: { type: Type.STRING }
+                          },
+                          required: ["scene_description", "camera_movement", "lens_lighting_specs", "style_reference", "duration"]
+                        },
+                        credit_estimate: { type: Type.NUMBER },
+                        shot_breakdown: {
+                          type: Type.ARRAY,
+                          items: {
+                            type: Type.OBJECT,
+                            properties: {
+                              shot: { type: Type.NUMBER },
+                              description: { type: Type.STRING },
+                              duration: { type: Type.STRING }
+                            },
+                            required: ["shot", "description", "duration"]
+                          }
+                        }
+                      },
+                      required: ["recommended_model", "camera_physics", "prompt_dna", "credit_estimate", "shot_breakdown"]
+                    },
+                    click_to_ad_brief: {
+                      type: Type.OBJECT,
+                      properties: {
+                        product_url: { type: Type.STRING },
+                        brand_intent: { type: Type.STRING },
+                        visual_anchors: { type: Type.STRING },
+                        target_platform: { type: Type.STRING }
+                      },
+                      required: ["product_url", "brand_intent", "visual_anchors", "target_platform"]
                     },
                     cultural_hooks: {
                       type: Type.ARRAY,
@@ -3041,7 +3155,7 @@ function ConceptCard({
   const [isVisualizingStoryboard, setIsVisualizingStoryboard] = useState(false);
   const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
   const [showRefine, setShowRefine] = useState(false);
-  const [activeTab, setActiveTab] = useState<"details" | "storyboard" | "script">("details");
+  const [activeTab, setActiveTab] = useState<"details" | "storyboard" | "script" | "higgsfield">("details");
 
   const handleRefine = async () => {
     if (!refineInput.trim()) return;
@@ -3266,6 +3380,7 @@ function ConceptCard({
                   { id: "details", label: "Strategic Details" },
                   { id: "storyboard", label: "Storyboard" },
                   { id: "script", label: "Script Snippet" },
+                  { id: "higgsfield", label: "Higgsfield DNA" },
                 ].map((tab) => (
                   <button
                     key={tab.id}
@@ -3494,6 +3609,133 @@ function ConceptCard({
                   </div>
                   <div className="bg-zinc-950 border border-zinc-800 p-8 font-mono text-sm text-zinc-400 leading-relaxed whitespace-pre-wrap italic">
                     {concept.script_snippet || "No script snippet generated for this concept."}
+                  </div>
+                </motion.div>
+              )}
+
+              {activeTab === "higgsfield" && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="space-y-10"
+                >
+                  <div className="flex flex-col md:flex-row justify-between items-start gap-6">
+                    <div className="space-y-1">
+                      <h4 className="font-display text-xl text-white uppercase tracking-tighter">Higgsfield DNA</h4>
+                      <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Optimized for AI Video Generation</p>
+                    </div>
+                    <div className="flex flex-col items-end gap-2">
+                      <div className="flex items-center gap-2 px-4 py-2 bg-zinc-950 border border-zinc-800">
+                        <span className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest">Recommended Model:</span>
+                        <span className="font-display text-sm text-cyan-400">{concept.higgsfield_config?.recommended_model || "N/A"}</span>
+                      </div>
+                      <div className="flex items-center gap-2 px-4 py-2 bg-zinc-950 border border-zinc-800">
+                        <span className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest">Credit Estimate:</span>
+                        <span className="font-display text-sm text-yellow-400">{concept.higgsfield_config?.credit_estimate || 0} Credits</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                    <div className="space-y-6">
+                      <div className="space-y-4">
+                        <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Camera Physics Layer</span>
+                        <div className="p-6 bg-zinc-950 border border-zinc-800 space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                              <span className="font-mono text-[8px] text-zinc-700 uppercase tracking-widest">Body</span>
+                              <p className="text-xs text-zinc-300">{concept.higgsfield_config?.camera_physics?.body || "N/A"}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="font-mono text-[8px] text-zinc-700 uppercase tracking-widest">Lens</span>
+                              <p className="text-xs text-zinc-300">{concept.higgsfield_config?.camera_physics?.lens || "N/A"}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="font-mono text-[8px] text-zinc-700 uppercase tracking-widest">Focal Length</span>
+                              <p className="text-xs text-zinc-300">{concept.higgsfield_config?.camera_physics?.focal_length || "N/A"}</p>
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <span className="font-mono text-[8px] text-zinc-700 uppercase tracking-widest">Movements</span>
+                            <div className="flex flex-wrap gap-2">
+                              {concept.higgsfield_config?.camera_physics?.movements?.map((m, i) => (
+                                <span key={i} className="px-2 py-0.5 bg-zinc-900 border border-zinc-800 text-[9px] font-mono text-zinc-500 uppercase tracking-wider">{m}</span>
+                              )) || <span className="text-xs text-zinc-700 italic">None specified</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Shot Breakdown</span>
+                        <div className="space-y-2">
+                          {concept.higgsfield_config?.shot_breakdown?.map((shot, i) => (
+                            <div key={i} className="flex items-center gap-4 p-3 bg-zinc-950/50 border border-zinc-900">
+                              <span className="font-mono text-[10px] text-zinc-700">0{shot.shot}</span>
+                              <p className="flex-1 text-[11px] text-zinc-400 leading-relaxed">{shot.description}</p>
+                              <span className="font-mono text-[9px] text-zinc-600">{shot.duration}</span>
+                            </div>
+                          )) || <p className="text-xs text-zinc-700 italic">No breakdown available</p>}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Structured Prompt DNA</span>
+                          <button 
+                            onClick={() => {
+                              const dna = concept.higgsfield_config?.prompt_dna;
+                              if (dna) {
+                                onCopy(`Scene: ${dna.scene_description}\nCamera: ${dna.camera_movement}\nLens/Lighting: ${dna.lens_lighting_specs}\nStyle: ${dna.style_reference}\nDuration: ${dna.duration}`);
+                              }
+                            }}
+                            className="text-zinc-600 hover:text-zinc-400 transition-colors"
+                          >
+                            <Copy size={14} />
+                          </button>
+                        </div>
+                        <div className="p-6 bg-zinc-950 border border-zinc-800 space-y-4">
+                          <div className="space-y-1">
+                            <span className="font-mono text-[8px] text-zinc-700 uppercase tracking-widest">Scene Description</span>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">{concept.higgsfield_config?.prompt_dna?.scene_description || "N/A"}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="font-mono text-[8px] text-zinc-700 uppercase tracking-widest">Camera Movement</span>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">{concept.higgsfield_config?.prompt_dna?.camera_movement || "N/A"}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="font-mono text-[8px] text-zinc-700 uppercase tracking-widest">Lens & Lighting</span>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed">{concept.higgsfield_config?.prompt_dna?.lens_lighting_specs || "N/A"}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="font-mono text-[8px] text-zinc-700 uppercase tracking-widest">Style Reference</span>
+                            <p className="text-[11px] text-zinc-400 leading-relaxed italic">{concept.higgsfield_config?.prompt_dna?.style_reference || "N/A"}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {concept.click_to_ad_brief && (
+                        <div className="space-y-4">
+                          <span className="font-mono text-[10px] text-cyan-400 uppercase tracking-widest">Click-to-Ad Brief</span>
+                          <div className="p-6 bg-cyan-950/10 border border-cyan-900/30 space-y-4">
+                            <div className="space-y-1">
+                              <span className="font-mono text-[8px] text-cyan-800 uppercase tracking-widest">Brand Intent</span>
+                              <p className="text-[11px] text-cyan-400/80 leading-relaxed">{concept.click_to_ad_brief.brand_intent}</p>
+                            </div>
+                            <div className="space-y-1">
+                              <span className="font-mono text-[8px] text-cyan-800 uppercase tracking-widest">Visual Anchors</span>
+                              <p className="text-[11px] text-cyan-400/80 leading-relaxed">{concept.click_to_ad_brief.visual_anchors}</p>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="font-mono text-[8px] text-cyan-800 uppercase tracking-widest">Target Platform</span>
+                              <span className="px-2 py-0.5 bg-cyan-950 border border-cyan-900 text-[9px] font-mono text-cyan-400 uppercase tracking-wider">{concept.click_to_ad_brief.target_platform}</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               )}
