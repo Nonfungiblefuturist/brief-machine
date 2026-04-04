@@ -316,6 +316,44 @@ export default function App() {
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+  const [selectedTrend, setSelectedTrend] = useState<Trend | null>(null);
+  const [isFetchingMoreTrends, setIsFetchingMoreTrends] = useState(false);
+
+  // Auto-save Storyboard Draft
+  useEffect(() => {
+    const draftTimer = setInterval(() => {
+      if (storyboarderFrames.length > 0 || storyboarderInput.trim() || storyboarderProjectName !== "Untitled Project") {
+        const draft = {
+          name: storyboarderProjectName,
+          input: storyboarderInput,
+          frames: storyboarderFrames,
+          timestamp: Date.now()
+        };
+        localStorage.setItem("storyboard_draft", JSON.stringify(draft));
+        console.log("Storyboard draft auto-saved.");
+      }
+    }, 120000); // Every 2 minutes
+
+    return () => clearInterval(draftTimer);
+  }, [storyboarderFrames, storyboarderInput, storyboarderProjectName]);
+
+  // Load Storyboard Draft on Mount
+  useEffect(() => {
+    const savedDraft = localStorage.getItem("storyboard_draft");
+    if (savedDraft && storyboarderFrames.length === 0 && !storyboarderInput.trim()) {
+      try {
+        const draft = JSON.parse(savedDraft);
+        // Only restore if it's relatively fresh (e.g., within 24 hours)
+        if (Date.now() - draft.timestamp < 86400000) {
+          setStoryboarderProjectName(draft.name);
+          setStoryboarderInput(draft.input);
+          setStoryboarderFrames(draft.frames);
+        }
+      } catch (e) {
+        console.error("Failed to load storyboard draft:", e);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -790,15 +828,17 @@ Think D&AD. Think Cannes.`,
     });
   };
 
-  const fetchTrends = async () => {
-    setError(null);
-    setView("loading");
+  const fetchTrends = async (loadMore = false) => {
+    if (loadMore) setIsFetchingMoreTrends(true);
+    else setView("loading");
     
+    setLoadingMsg("Scanning the zeitgeist...");
+    setError(null);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
-        contents: "Give me the 6 most potent cultural tensions shaping advertising RIGHT NOW in 2025-2026.",
+        contents: `Give me 6 ${loadMore ? 'additional ' : ''}potent cultural tensions shaping advertising RIGHT NOW in 2025-2026. ${loadMore ? 'Ensure these are different from common mainstream trends.' : ''}`,
         config: {
           systemInstruction: TREND_PROMPT,
           responseMimeType: "application/json",
@@ -827,12 +867,18 @@ Think D&AD. Think Cannes.`,
       });
 
       const parsed = JSON.parse(response.text || "{}");
-      setTrends(parsed.trends);
+      if (loadMore && trends) {
+        setTrends([...trends, ...parsed.trends]);
+      } else {
+        setTrends(parsed.trends);
+      }
       setView("trends");
     } catch (e) {
       console.error(e);
       setError("Trend scan failed. The zeitgeist is currently unavailable.");
-      setView("input");
+      if (!loadMore) setView("input");
+    } finally {
+      setIsFetchingMoreTrends(false);
     }
   };
 
@@ -1415,7 +1461,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
     <div className="min-h-screen relative overflow-x-hidden selection:bg-white selection:text-black">
       <div className="grain-overlay" />
       
-      <div className="relative z-10 max-w-4xl mx-auto px-6 py-12 md:py-20">
+      <div className="relative z-10 w-full px-6 md:px-12 py-12 md:py-20">
         {/* Header */}
         <header className="mb-16 border-b border-zinc-800 pb-10">
           <div className="flex justify-between items-start mb-10">
@@ -1457,7 +1503,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.2 }}
-            className="font-mono text-xs text-zinc-500 mt-6 max-w-xl leading-relaxed"
+            className="font-mono text-xs text-zinc-500 mt-6 w-full leading-relaxed"
           >
             Feed it a brand. Get back ideas that win. Powered by the same creative philosophy that wins D&AD Black Pencils.
           </motion.p>
@@ -1914,7 +1960,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="space-y-8"
+              className="space-y-12"
             >
               <div className="grid grid-cols-1 gap-4">
                 {trends.map((trend, idx) => (
@@ -1923,10 +1969,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     initial={{ opacity: 0, x: -20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.1 }}
-                    onClick={() => {
-                      setBriefInput(trend.brief_starter);
-                      setView("input");
-                    }}
+                    onClick={() => setSelectedTrend(trend)}
                     className="group bg-zinc-900/30 border border-zinc-800 p-8 hover:border-zinc-600 transition-all cursor-pointer"
                   >
                     <div className="flex justify-between items-start mb-4">
@@ -1935,7 +1978,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       </h3>
                       <ChevronRight className="text-zinc-700 group-hover:text-white group-hover:translate-x-1 transition-all" size={20} />
                     </div>
-                    <p className="text-sm text-zinc-400 mb-6 leading-relaxed">{trend.why_it_matters}</p>
+                    <p className="text-sm text-zinc-400 mb-6 leading-relaxed line-clamp-2">{trend.why_it_matters}</p>
                     
                     <div className="mt-6 flex flex-wrap gap-3 pt-6 border-t border-zinc-800/50">
                       <button
@@ -1985,8 +2028,40 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   </motion.div>
                 ))}
               </div>
+
+              <div className="flex justify-center pt-8">
+                <button
+                  onClick={() => fetchTrends(true)}
+                  disabled={isFetchingMoreTrends}
+                  className="font-mono text-[10px] uppercase tracking-widest px-8 py-4 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isFetchingMoreTrends ? <RefreshCcw size={12} className="animate-spin" /> : <Plus size={12} />}
+                  Load More Trends
+                </button>
+              </div>
             </motion.div>
           )}
+
+          <AnimatePresence>
+            {selectedTrend && (
+              <TrendDetailModal 
+                trend={selectedTrend} 
+                onClose={() => setSelectedTrend(null)}
+                onSendToEngine={(concept) => {
+                  setBriefInput(concept);
+                  setView("input");
+                  setSelectedTrend(null);
+                }}
+                onSendToStoryboarder={(concept, name) => {
+                  setStoryboarderInput(concept);
+                  setStoryboarderProjectName(name);
+                  setStoryboarderFrames([]);
+                  setView("storyboarder");
+                  setSelectedTrend(null);
+                }}
+              />
+            )}
+          </AnimatePresence>
 
           {/* STORYBOARDER VIEW */}
           {view === "storyboarder" && (
@@ -2115,7 +2190,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     <div className="border-b border-[#27272a] pb-8 mb-8">
                       <h2 className="font-display text-4xl text-[#ffffff] italic mb-2">{storyboarderProjectName}</h2>
                       <div className="flex justify-between items-end">
-                        <p className="font-mono text-[10px] text-[#71717a] uppercase tracking-widest max-w-2xl">
+                        <p className="font-mono text-[10px] text-[#71717a] uppercase tracking-widest w-full">
                           {storyboarderInput.slice(0, 200)}{storyboarderInput.length > 200 ? '...' : ''}
                         </p>
                         <div className="text-right">
@@ -2344,6 +2419,88 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
 // --- Helper Components ---
 
 
+function TrendDetailModal({ 
+  trend, 
+  onClose, 
+  onSendToEngine, 
+  onSendToStoryboarder 
+}: { 
+  trend: Trend; 
+  onClose: () => void;
+  onSendToEngine: (concept: string) => void;
+  onSendToStoryboarder: (concept: string, name: string) => void;
+}) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl overflow-y-auto p-6 md:p-12 flex items-center justify-center"
+    >
+      <div className="w-full max-w-4xl bg-zinc-900 border border-zinc-800 p-8 md:p-12 space-y-10 relative">
+        <button 
+          onClick={onClose}
+          className="absolute top-6 right-6 text-zinc-500 hover:text-white transition-colors"
+        >
+          <X size={24} />
+        </button>
+
+        <div className="space-y-4">
+          <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Cultural Tension</div>
+          <h2 className="font-display text-5xl text-white italic leading-tight">{trend.name}</h2>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+          <div className="space-y-8">
+            <div className="space-y-2">
+              <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Why It Matters</label>
+              <p className="text-zinc-300 leading-relaxed">{trend.why_it_matters}</p>
+            </div>
+            <div className="space-y-2">
+              <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Emotional Undercurrent</label>
+              <p className="text-zinc-400 italic leading-relaxed">"{trend.emotional_undercurrent}"</p>
+            </div>
+          </div>
+
+          <div className="space-y-8 bg-black/30 p-8 border border-zinc-800/50">
+            <div className="space-y-2">
+              <label className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Viral Concept</label>
+              <p className="text-white font-display text-xl italic leading-relaxed">{trend.viral_concept}</p>
+            </div>
+            <div className="space-y-2">
+              <label className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Video Hook</label>
+              <p className="text-zinc-400 font-mono text-xs leading-relaxed">{trend.video_hook}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-4 pt-8 border-t border-zinc-800">
+          <button
+            onClick={() => onSendToEngine(trend.viral_concept)}
+            className="flex-1 py-4 bg-white text-black font-mono text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center justify-center gap-3"
+          >
+            <Zap size={14} />
+            Send to Creative Engine
+          </button>
+          <button
+            onClick={() => onSendToStoryboarder(trend.viral_concept, trend.name)}
+            className="flex-1 py-4 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 font-mono text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-3"
+          >
+            <Layout size={14} />
+            Auto Storyboard
+          </button>
+          <button
+            onClick={onClose}
+            className="px-8 py-4 font-mono text-[10px] uppercase tracking-widest text-zinc-700 hover:text-zinc-400 transition-all"
+          >
+            Back to Scanner
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 function ComparisonView({ concepts, onClose }: { concepts: Concept[]; onClose: () => void }) {
   return (
     <motion.div 
@@ -2352,7 +2509,7 @@ function ComparisonView({ concepts, onClose }: { concepts: Concept[]; onClose: (
       exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl overflow-y-auto p-6 md:p-12"
     >
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         <div className="flex justify-between items-center mb-12 border-b border-zinc-800 pb-8">
           <div>
             <h2 className="font-display text-4xl text-white mb-2">Concept Comparison</h2>
@@ -2418,9 +2575,9 @@ function ShortlistView({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl overflow-y-auto p-6 md:p-20"
+      className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl overflow-y-auto p-6 md:p-12"
     >
-      <div className="max-w-6xl mx-auto space-y-12">
+      <div className="w-full space-y-12">
         <div className="flex justify-between items-center border-b border-zinc-800 pb-10">
           <div className="space-y-1">
             <h2 className="font-display text-5xl text-white italic">Shortlist</h2>
@@ -2666,7 +2823,7 @@ function ConceptCard({
                 </div>
               )}
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
-                <p className="font-display italic text-2xl text-white leading-tight max-w-2xl">
+                <p className="font-display italic text-2xl text-white leading-tight w-full">
                   {concept.idea}
                 </p>
                 <div className="flex flex-wrap gap-2 shrink-0">
