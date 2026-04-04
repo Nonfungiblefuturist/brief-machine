@@ -1,6 +1,17 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel, Modality, GenerateContentResponse } from "@google/genai";
+
+declare global {
+  interface Window {
+    aistudio: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
+  }
+}
 import { motion, AnimatePresence } from "motion/react";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 import { 
   Plus, 
   Minus, 
@@ -17,7 +28,10 @@ import {
   Search,
   Code,
   X,
-  ArrowLeft
+  ArrowLeft,
+  Download,
+  Image as ImageIcon,
+  Layout
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -50,6 +64,7 @@ WHEN GENERATING CONCEPTS, FOLLOW THIS ARCHITECTURE:
 
 For each concept provide:
 - CONCEPT NAME: A punchy 2-4 word title
+- TITLE OPTIONS: 3-4 alternative punchy titles that capture the core idea from different angles.
 - THE IDEA IN ONE LINE: If you can't say it in one sentence, kill it
 - FORMAT: What medium/format does this idea DEMAND? (Don't default to :30 film. Think installations, stunts, hacks, print, social mechanics, UX interventions, packaging, ambient, data-driven, AI-powered, experiential)
 - THE EXECUTION: 3-4 sentences max. What does the audience SEE/EXPERIENCE?
@@ -121,6 +136,9 @@ interface StoryboardFrame {
 
 interface Concept {
   name: string;
+  title_options: string[];
+  selected_title?: string;
+  background_url?: string;
   idea: string;
   format: string;
   execution: string;
@@ -195,6 +213,31 @@ export default function App() {
   const [loadingMsg, setLoadingMsg] = useState("");
   const [expandedConcept, setExpandedConcept] = useState<number | null>(0);
   const [copied, setCopied] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkKey = async () => {
+      if (window.aistudio) {
+        try {
+          const selected = await window.aistudio.hasSelectedApiKey();
+          setHasApiKey(selected);
+        } catch (e) {
+          console.error("Error checking API key:", e);
+          setHasApiKey(true); // Fallback
+        }
+      } else {
+        setHasApiKey(true);
+      }
+    };
+    checkKey();
+  }, []);
+
+  const handleOpenKey = async () => {
+    if (window.aistudio) {
+      await window.aistudio.openSelectKey();
+      setHasApiKey(true);
+    }
+  };
 
   const loadingMessages = [
     "Mining cultural tensions...",
@@ -261,6 +304,10 @@ Think D&AD. Think Cannes.`,
                   type: Type.OBJECT,
                   properties: {
                     name: { type: Type.STRING },
+                    title_options: {
+                      type: Type.ARRAY,
+                      items: { type: Type.STRING }
+                    },
                     idea: { type: Type.STRING },
                     format: { type: Type.STRING },
                     execution: { type: Type.STRING },
@@ -294,7 +341,7 @@ Think D&AD. Think Cannes.`,
                       }
                     }
                   },
-                  required: ["name", "idea", "format", "execution", "why_it_works", "reference_energy", "risk_level", "risk_reason", "producibility", "ai_visual_prompt", "cultural_hooks"]
+                  required: ["name", "title_options", "idea", "format", "execution", "why_it_works", "reference_energy", "risk_level", "risk_reason", "producibility", "ai_visual_prompt", "cultural_hooks"]
                 }
               }
             },
@@ -391,6 +438,10 @@ Think D&AD. Think Cannes.`,
             type: Type.OBJECT,
             properties: {
               name: { type: Type.STRING },
+              title_options: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              },
               idea: { type: Type.STRING },
               format: { type: Type.STRING },
               execution: { type: Type.STRING },
@@ -424,7 +475,7 @@ Think D&AD. Think Cannes.`,
                 }
               }
             },
-            required: ["name", "idea", "format", "execution", "why_it_works", "reference_energy", "risk_level", "risk_reason", "producibility", "ai_visual_prompt", "cultural_hooks"]
+            required: ["name", "title_options", "idea", "format", "execution", "why_it_works", "reference_energy", "risk_level", "risk_reason", "producibility", "ai_visual_prompt", "cultural_hooks"]
           }
         }
       });
@@ -483,6 +534,185 @@ Think D&AD. Think Cannes.`,
       console.error(e);
       setError("Storyboard visualization failed.");
     }
+  };
+
+  const generateBackground = async (index: number) => {
+    if (!results) return;
+    const concept = results.concepts[index];
+    setError(null);
+    
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: [{ text: `Atmospheric background for: ${concept.ai_visual_prompt}. Style: Cinematic, high-end advertising, abstract but evocative.` }],
+        },
+        config: {
+          imageConfig: { aspectRatio: "16:9" }
+        }
+      });
+
+      let imageUrl = "";
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+
+      if (imageUrl) {
+        const newConcepts = [...results.concepts];
+        newConcepts[index] = { ...newConcepts[index], background_url: imageUrl };
+        setResults({ ...results, concepts: newConcepts });
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Background generation failed.");
+    }
+  };
+
+  const selectTitle = (conceptIndex: number, title: string) => {
+    if (!results) return;
+    const newConcepts = [...results.concepts];
+    newConcepts[conceptIndex] = { ...newConcepts[conceptIndex], selected_title: title };
+    setResults({ ...results, concepts: newConcepts });
+  };
+
+  const exportResultsToPDF = async () => {
+    if (!results) return;
+    const doc = new jsPDF();
+    const margin = 20;
+    let y = 20;
+
+    // Title
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.text(results.brand.toUpperCase(), margin, y);
+    y += 10;
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Category: ${results.category}`, margin, y);
+    y += 20;
+
+    // Strategy
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("STRATEGIC FOUNDATION", margin, y);
+    y += 10;
+    
+    doc.setFontSize(10);
+    doc.text("TENSION", margin, y);
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    const tensionLines = doc.splitTextToSize(results.tension, 170);
+    doc.text(tensionLines, margin, y);
+    y += (tensionLines.length * 5) + 10;
+
+    doc.setFont("helvetica", "bold");
+    doc.text("INSIGHT", margin, y);
+    y += 5;
+    doc.setFont("helvetica", "italic");
+    const insightLines = doc.splitTextToSize(`"${results.insight}"`, 170);
+    doc.text(insightLines, margin, y);
+    y += (insightLines.length * 5) + 20;
+
+    // Concepts
+    results.concepts.forEach((concept, i) => {
+      if (y > 240) {
+        doc.addPage();
+        y = 20;
+      }
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text(`CONCEPT 0${i + 1}: ${concept.selected_title || concept.name}`, margin, y);
+      y += 10;
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("THE IDEA", margin, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      const ideaLines = doc.splitTextToSize(concept.idea, 170);
+      doc.text(ideaLines, margin, y);
+      y += (ideaLines.length * 5) + 10;
+
+      doc.setFont("helvetica", "bold");
+      doc.text("EXECUTION", margin, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      const execLines = doc.splitTextToSize(concept.execution, 170);
+      doc.text(execLines, margin, y);
+      y += (execLines.length * 5) + 10;
+
+      doc.setFont("helvetica", "bold");
+      doc.text("STRATEGIC LOGIC", margin, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      const logicLines = doc.splitTextToSize(concept.why_it_works, 170);
+      doc.text(logicLines, margin, y);
+      y += (logicLines.length * 5) + 20;
+    });
+
+    doc.save(`${results.brand.replace(/\s+/g, '_')}_Brief.pdf`);
+  };
+
+  const exportConceptToPDF = async (index: number) => {
+    if (!results) return;
+    const concept = results.concepts[index];
+    const doc = new jsPDF();
+    const margin = 20;
+    let y = 20;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.text((concept.selected_title || concept.name).toUpperCase(), margin, y);
+    y += 15;
+
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "italic");
+    const ideaLines = doc.splitTextToSize(`"${concept.idea}"`, 170);
+    doc.text(ideaLines, margin, y);
+    y += (ideaLines.length * 5) + 15;
+
+    const sections = [
+      { label: "STRATEGIC LOGIC", value: concept.why_it_works },
+      { label: "EXECUTION", value: concept.execution },
+      { label: "REFERENCE ENERGY", value: concept.reference_energy },
+      { label: "PRODUCIBILITY", value: concept.producibility },
+      { label: "AI VISUAL PROMPT", value: concept.ai_visual_prompt },
+    ];
+
+    sections.forEach(section => {
+      if (y > 260) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(10);
+      doc.text(section.label, margin, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
+      const lines = doc.splitTextToSize(section.value, 170);
+      doc.text(lines, margin, y);
+      y += (lines.length * 5) + 10;
+    });
+
+    if (concept.script_snippet) {
+      if (y > 240) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.text("SCRIPT SNIPPET", margin, y);
+      y += 5;
+      doc.setFont("courier", "normal");
+      const scriptLines = doc.splitTextToSize(concept.script_snippet, 170);
+      doc.text(scriptLines, margin, y);
+    }
+
+    doc.save(`${(concept.selected_title || concept.name).replace(/\s+/g, '_')}_Concept.pdf`);
   };
 
   const visualizeConcept = async (index: number) => {
@@ -569,12 +799,41 @@ Think D&AD. Think Cannes.`,
         newConcepts[index] = { ...concept, visual_video_url: videoUrl };
         setResults({ ...results, concepts: newConcepts });
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setError("Video generation failed. The AI director is on strike.");
+      if (e?.message?.includes("Requested entity was not found")) {
+        setHasApiKey(false);
+        setError("API Key session expired. Please reconnect.");
+      } else {
+        setError("Video generation failed. The AI director is on strike.");
+      }
     }
   };
 
+
+  if (hasApiKey === false) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center p-6 text-center">
+        <div className="max-w-md space-y-8">
+          <div className="space-y-4">
+            <h1 className="font-display text-4xl text-white italic">Connect to AI Director</h1>
+            <p className="text-zinc-500 font-mono text-xs uppercase tracking-widest leading-relaxed">
+              To generate AI video snippets, you must connect a paid Google Cloud project with billing enabled.
+            </p>
+          </div>
+          <button
+            onClick={handleOpenKey}
+            className="w-full py-4 bg-white text-black font-mono text-[10px] uppercase tracking-[0.2em] hover:bg-zinc-200 transition-all"
+          >
+            Select API Key
+          </button>
+          <p className="text-zinc-700 font-mono text-[8px] uppercase tracking-widest">
+            See <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="underline">billing documentation</a> for details.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen relative overflow-x-hidden selection:bg-white selection:text-black">
@@ -789,8 +1048,17 @@ Think D&AD. Think Cannes.`,
             >
               {/* Strategy Section */}
               <div className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-10">
-                <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-[0.2em] mb-6">
-                  Strategic Foundation
+                <div className="flex justify-between items-start mb-6">
+                  <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-[0.2em]">
+                    Strategic Foundation
+                  </div>
+                  <button
+                    onClick={() => exportResultsToPDF()}
+                    className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                  >
+                    <Download size={12} />
+                    Export PDF
+                  </button>
                 </div>
                 <h2 className="font-display text-3xl md:text-4xl text-white mb-8">
                   {results.brand} <span className="text-zinc-600">/ {results.category}</span>
@@ -922,6 +1190,9 @@ Think D&AD. Think Cannes.`,
                     onVisualize={() => visualizeConcept(idx)}
                     onVisualizeVideo={() => visualizeVideo(idx)}
                     onVisualizeStoryboard={() => visualizeStoryboard(idx)}
+                    onGenerateBackground={() => generateBackground(idx)}
+                    onSelectTitle={(title) => selectTitle(idx, title)}
+                    onExportPDF={() => exportConceptToPDF(idx)}
                     onCopy={copyToClipboard}
                   />
                 ))}
@@ -1113,6 +1384,9 @@ function ConceptCard({
   onVisualize,
   onVisualizeVideo,
   onVisualizeStoryboard,
+  onGenerateBackground,
+  onSelectTitle,
+  onExportPDF,
   onCopy
 }: { 
   concept: Concept; 
@@ -1125,6 +1399,9 @@ function ConceptCard({
   onVisualize: () => Promise<void>;
   onVisualizeVideo: () => Promise<void>;
   onVisualizeStoryboard: () => Promise<void>;
+  onGenerateBackground: () => Promise<void>;
+  onSelectTitle: (title: string) => void;
+  onExportPDF: () => void;
   onCopy: (text: string) => void;
 }) {
   const [refineInput, setRefineInput] = useState("");
@@ -1132,6 +1409,7 @@ function ConceptCard({
   const [isVisualizing, setIsVisualizing] = useState(false);
   const [isVisualizingVideo, setIsVisualizingVideo] = useState(false);
   const [isVisualizingStoryboard, setIsVisualizingStoryboard] = useState(false);
+  const [isGeneratingBackground, setIsGeneratingBackground] = useState(false);
   const [showRefine, setShowRefine] = useState(false);
   const [activeTab, setActiveTab] = useState<"details" | "storyboard" | "script">("details");
 
@@ -1162,6 +1440,12 @@ function ConceptCard({
     setIsVisualizingStoryboard(false);
   };
 
+  const handleGenerateBackground = async () => {
+    setIsGeneratingBackground(true);
+    await onGenerateBackground();
+    setIsGeneratingBackground(false);
+  };
+
   return (
     <div className={cn(
       "border transition-all duration-500 overflow-hidden",
@@ -1188,7 +1472,7 @@ function ConceptCard({
           <div className="flex items-baseline gap-6">
             <span className="font-mono text-[10px] text-zinc-700">0{index + 1}</span>
             <h3 className="font-display text-2xl text-white group-hover:translate-x-1 transition-transform">
-              {concept.name}
+              {concept.selected_title || concept.name}
             </h3>
             <div className="hidden md:block">
               <RiskBadge level={concept.risk_level} />
@@ -1231,11 +1515,26 @@ function ConceptCard({
                     {isVisualizingVideo ? "Generating..." : concept.visual_video_url ? "Video Ready" : "Video Snippet"}
                   </button>
                   <button
+                    onClick={handleGenerateBackground}
+                    disabled={isGeneratingBackground}
+                    className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                  >
+                    <ImageIcon size={12} className={isGeneratingBackground ? "animate-pulse" : ""} />
+                    {isGeneratingBackground ? "Generating BG..." : "Atmospheric BG"}
+                  </button>
+                  <button
                     onClick={() => setShowRefine(!showRefine)}
                     className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
                   >
                     <RefreshCcw size={12} className={isRefining ? "animate-spin" : ""} />
                     {showRefine ? "Cancel" : "Refine Concept"}
+                  </button>
+                  <button
+                    onClick={onExportPDF}
+                    className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                  >
+                    <Download size={12} />
+                    Export PDF
                   </button>
                 </div>
               </div>
@@ -1268,6 +1567,27 @@ function ConceptCard({
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-10"
                 >
+                  {/* Title Selection */}
+                  <div className="space-y-4">
+                    <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Title Options</span>
+                    <div className="flex flex-wrap gap-2">
+                      {[concept.name, ...(concept.title_options || [])].map((title, i) => (
+                        <button
+                          key={i}
+                          onClick={() => onSelectTitle(title)}
+                          className={cn(
+                            "px-4 py-2 font-display italic text-lg border transition-all",
+                            (concept.selected_title === title || (!concept.selected_title && title === concept.name))
+                              ? "bg-white text-black border-white"
+                              : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:border-zinc-700"
+                          )}
+                        >
+                          {title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {concept.visual_url && (
                       <div className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden">
@@ -1280,6 +1600,21 @@ function ConceptCard({
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
                         <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest">
                           Mood Board
+                        </div>
+                      </div>
+                    )}
+
+                    {concept.background_url && (
+                      <div className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden">
+                        <img 
+                          src={concept.background_url} 
+                          alt="Atmospheric Background" 
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+                        <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest">
+                          Atmospheric BG
                         </div>
                       </div>
                     )}
