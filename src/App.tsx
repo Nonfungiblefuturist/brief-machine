@@ -32,7 +32,12 @@ import {
   Download,
   Image as ImageIcon,
   Layout,
-  Trash2
+  Trash2,
+  LogIn,
+  Folder,
+  FolderOpen,
+  ExternalLink,
+  Save
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -126,12 +131,43 @@ For each trend, provide:
 - A "viral_concept" — A specific, high-impact idea for an AI-generated video that leverages this trend. It should be designed for shareability and visual awe.
 - A "video_hook" — A 3-second hook for social media (TikTok/Reels) to grab attention immediately.`;
 
+import { 
+  auth, 
+  db, 
+  googleProvider, 
+  signInWithPopup, 
+  signOut, 
+  onAuthStateChanged, 
+  collection, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  getDocs, 
+  query, 
+  where, 
+  orderBy, 
+  deleteDoc, 
+  serverTimestamp, 
+  Timestamp,
+  User
+} from './firebase';
+
 // --- Types ---
 
 interface StoryboardFrame {
   frame_description: string;
   visual_url?: string;
   annotation?: string;
+}
+
+interface SavedProject {
+  id: string;
+  name: string;
+  input: string;
+  frames: StoryboardFrame[];
+  createdAt: any;
+  updatedAt: any;
+  userId: string;
 }
 
 interface Concept {
@@ -177,6 +213,57 @@ interface Trend {
   video_hook: string;
 }
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string;
+    email?: string | null;
+    emailVerified?: boolean;
+    isAnonymous?: boolean;
+    tenantId?: string | null;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+const handleFirestoreError = (error: unknown, operationType: OperationType, path: string | null) => {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+};
+
 // --- Components ---
 
 const DetailBlock = ({ label, value, className }: { label: string; value: string; className?: string }) => (
@@ -201,7 +288,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
@@ -225,6 +312,111 @@ export default function App() {
   const [storyboarderFrames, setStoryboarderFrames] = useState<StoryboardFrame[]>([]);
   const [isGeneratingStoryboarder, setIsGeneratingStoryboarder] = useState(false);
   const [isGeneratingIndividualFrame, setIsGeneratingIndividualFrame] = useState<number | null>(null);
+  const [user, setUser] = useState<User | null>(null);
+  const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingProjects, setIsLoadingProjects] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      if (currentUser) {
+        fetchSavedProjects(currentUser.uid);
+      } else {
+        setSavedProjects([]);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const fetchSavedProjects = async (uid: string) => {
+    setIsLoadingProjects(true);
+    const path = "storyboards";
+    try {
+      const q = query(
+        collection(db, path), 
+        where("userId", "==", uid),
+        orderBy("updatedAt", "desc")
+      );
+      const querySnapshot = await getDocs(q);
+      const projects: SavedProject[] = [];
+      querySnapshot.forEach((doc) => {
+        projects.push({ id: doc.id, ...doc.data() } as SavedProject);
+      });
+      setSavedProjects(projects);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.GET, path);
+    } finally {
+      setIsLoadingProjects(false);
+    }
+  };
+
+  const saveStoryboard = async () => {
+    if (!user) {
+      setError("Please sign in to save your work.");
+      return;
+    }
+    if (storyboarderFrames.length === 0) return;
+
+    setIsSaving(true);
+    const projectId = storyboarderProjectName.replace(/\s+/g, '-').toLowerCase() + '-' + Date.now();
+    const path = `storyboards/${projectId}`;
+    try {
+      const projectRef = doc(db, "storyboards", projectId);
+      
+      const projectData = {
+        userId: user.uid,
+        name: storyboarderProjectName,
+        input: storyboarderInput,
+        frames: storyboarderFrames,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(projectRef, projectData);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+      fetchSavedProjects(user.uid);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.WRITE, path);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const loadProject = (project: SavedProject) => {
+    setStoryboarderProjectName(project.name);
+    setStoryboarderInput(project.input);
+    setStoryboarderFrames(project.frames);
+    setView("storyboarder");
+  };
+
+  const deleteProject = async (projectId: string) => {
+    if (!user) return;
+    const path = `storyboards/${projectId}`;
+    try {
+      await deleteDoc(doc(db, "storyboards", projectId));
+      fetchSavedProjects(user.uid);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.DELETE, path);
+    }
+  };
+
+  const handleLogin = async () => {
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (e) {
+      console.error("Login failed:", e);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (e) {
+      console.error("Logout failed:", e);
+    }
+  };
 
   useEffect(() => {
     const checkKey = async () => {
@@ -1226,18 +1418,40 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
       <div className="relative z-10 max-w-4xl mx-auto px-6 py-12 md:py-20">
         {/* Header */}
         <header className="mb-16 border-b border-zinc-800 pb-10">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col md:flex-row md:items-baseline gap-4"
-          >
-            <h1 className="font-display text-5xl md:text-7xl text-white tracking-tight leading-none">
-              Brief Machine
-            </h1>
-            <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-[0.2em]">
-              Concept Engine v2.6
-            </span>
-          </motion.div>
+          <div className="flex justify-between items-start mb-10">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex flex-col md:flex-row md:items-baseline gap-4"
+            >
+              <h1 className="font-display text-5xl md:text-7xl text-white tracking-tight leading-none">
+                Brief Machine
+              </h1>
+              <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-[0.2em]">
+                Concept Engine v2.6
+              </span>
+            </motion.div>
+
+            <div className="flex items-center gap-4">
+              {user ? (
+                <div className="flex items-center gap-4">
+                  <div className="text-right hidden md:block">
+                    <div className="font-mono text-[10px] text-white uppercase tracking-widest">{user.displayName}</div>
+                    <button onClick={handleLogout} className="font-mono text-[8px] text-zinc-500 uppercase tracking-widest hover:text-red-500 transition-colors">Sign Out</button>
+                  </div>
+                  {user.photoURL && <img src={user.photoURL} alt="" className="w-8 h-8 rounded-full border border-zinc-800" referrerPolicy="no-referrer" />}
+                </div>
+              ) : (
+                <button 
+                  onClick={handleLogin}
+                  className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                >
+                  <LogIn size={12} />
+                  Sign In
+                </button>
+              )}
+            </div>
+          </div>
           
           <motion.p 
             initial={{ opacity: 0 }}
@@ -1253,17 +1467,20 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               { id: "input", label: "Creative Engine", icon: Zap },
               { id: "trends", label: "Trend Scanner", icon: Search, action: fetchTrends },
               { id: "storyboarder", label: "Auto Storyboarder", icon: Layout },
+              { id: "projects", label: "Saved Projects", icon: Folder, action: user ? () => { fetchSavedProjects(user.uid); setView("projects"); } : undefined },
               { id: "shortlist", label: "Shortlist", icon: Check },
               { id: "prompt", label: "Prompt DNA", icon: Code },
             ].map((item) => (
               <button
                 key={item.id}
+                disabled={item.id === "projects" && !user}
                 onClick={() => item.action ? item.action() : setView(item.id as any)}
                 className={cn(
                   "font-mono text-[10px] uppercase tracking-widest px-4 py-2 border transition-all flex items-center gap-2",
                   (view === item.id || (item.id === "input" && view === "results"))
                     ? "bg-white text-black border-white"
-                    : "bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300"
+                    : "bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300",
+                  item.id === "projects" && !user && "opacity-30 cursor-not-allowed"
                 )}
               >
                 <item.icon size={12} />
@@ -1859,6 +2076,16 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   <div className="flex justify-between items-center">
                     <h3 className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Visual Sequence</h3>
                     <div className="flex gap-2">
+                      {user && (
+                        <button 
+                          onClick={saveStoryboard}
+                          disabled={isSaving}
+                          className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                        >
+                          {isSaving ? <RefreshCcw size={12} className="animate-spin" /> : <Save size={12} />}
+                          {copied ? "Saved!" : "Save Project"}
+                        </button>
+                      )}
                       <button 
                         onClick={exportStoryboard}
                         disabled={isExporting}
@@ -2005,6 +2232,80 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             >
               <PromptBlock title="Strategist DNA" content={MASTER_PROMPT} />
               <PromptBlock title="Analyst DNA" content={TREND_PROMPT} />
+            </motion.div>
+          )}
+
+          {/* PROJECTS VIEW */}
+          {view === "projects" && user && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-12"
+            >
+              <div className="flex justify-between items-end border-b border-zinc-800 pb-10">
+                <div className="space-y-2">
+                  <h2 className="font-display text-5xl text-white italic">Saved Projects</h2>
+                  <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Your creative archive</p>
+                </div>
+                <button 
+                  onClick={() => setView("storyboarder")}
+                  className="px-6 py-3 bg-white text-black font-mono text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center gap-2"
+                >
+                  <Plus size={14} />
+                  New Project
+                </button>
+              </div>
+
+              {isLoadingProjects ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <RefreshCcw size={32} className="text-zinc-800 animate-spin" />
+                  <p className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Loading Archive...</p>
+                </div>
+              ) : savedProjects.length === 0 ? (
+                <div className="text-center py-20 border border-dashed border-zinc-800">
+                  <FolderOpen size={48} className="text-zinc-800 mx-auto mb-4" />
+                  <p className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">No projects found in the archive.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-4">
+                  {savedProjects.map((project) => (
+                    <motion.div 
+                      key={project.id}
+                      className="group bg-zinc-900/30 border border-zinc-800 p-8 hover:border-zinc-600 transition-all flex justify-between items-center"
+                    >
+                      <div className="space-y-2 flex-1 cursor-pointer" onClick={() => loadProject(project)}>
+                        <div className="flex items-center gap-4">
+                          <h3 className="font-display text-2xl text-white group-hover:text-zinc-200 transition-colors">
+                            {project.name}
+                          </h3>
+                          <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
+                            {project.frames.length} Shots
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-500 font-mono uppercase tracking-widest">
+                          Last Updated: {project.updatedAt instanceof Timestamp ? project.updatedAt.toDate().toLocaleDateString() : 'Recently'}
+                        </p>
+                      </div>
+                      <div className="flex gap-4">
+                        <button 
+                          onClick={() => loadProject(project)}
+                          className="p-3 text-zinc-600 hover:text-white transition-colors"
+                          title="Open Project"
+                        >
+                          <ExternalLink size={18} />
+                        </button>
+                        <button 
+                          onClick={() => deleteProject(project.id)}
+                          className="p-3 text-zinc-600 hover:text-red-500 transition-colors"
+                          title="Delete Project"
+                        >
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              )}
             </motion.div>
           )}
 

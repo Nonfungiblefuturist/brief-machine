@@ -1,0 +1,61 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: storyboards
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required) - Owner UID
+    //   - name: string (required) - Project name (1-100 chars)
+    //   - input: string (required) - Original script (1-5000 chars)
+    //   - frames: list (required) - Array of StoryboardFrame objects (max 20)
+    //   - createdAt: timestamp (required)
+    //   - updatedAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.userId;
+    }
+
+    function isValidStoryboard(data) {
+      return data.keys().hasAll(['userId', 'name', 'input', 'frames', 'createdAt', 'updatedAt']) &&
+             data.userId is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.input is string && data.input.size() > 0 && data.input.size() <= 5000 &&
+             data.frames is list && data.frames.size() <= 20 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    match /storyboards/{storyboardId} {
+      allow read: if isAuthenticated() && isDocOwner();
+      allow create: if isAuthenticated() && 
+                      isOwner(request.resource.data.userId) && 
+                      isValidStoryboard(request.resource.data);
+      allow update: if isAuthenticated() && 
+                      isDocOwner() && 
+                      isOwner(request.resource.data.userId) && 
+                      isValidStoryboard(request.resource.data) &&
+                      request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAuthenticated() && isDocOwner();
+    }
+    
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

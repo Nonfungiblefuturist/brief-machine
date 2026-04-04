@@ -1,0 +1,35 @@
+{
+  "entities": {
+    "StoryboardProject": {
+      "title": "Storyboard Project",
+      "description": "A saved storyboard project containing multiple frames and metadata.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The UID of the user who owns this project." },
+        "name": { "type": "string", "description": "The name of the storyboard project." },
+        "input": { "type": "string", "description": "The original script or input text used to generate the storyboard." },
+        "frames": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "frame_description": { "type": "string" },
+              "visual_url": { "type": "string" },
+              "annotation": { "type": "string" }
+            },
+            "required": ["frame_description"]
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "input", "frames", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/storyboards/{storyboardId}": {
+      "schema": "StoryboardProject",
+      "description": "Collection of saved storyboard projects."
+    }
+  }
+}
