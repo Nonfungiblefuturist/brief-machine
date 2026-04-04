@@ -161,6 +161,9 @@ interface StoryboardFrame {
   frame_description: string;
   visual_url?: string;
   annotation?: string;
+  camera_angle?: string;
+  lighting?: string;
+  atmosphere?: string;
 }
 
 interface SavedProject {
@@ -759,8 +762,17 @@ Think D&AD. Think Cannes.`,
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const prompt = feedback 
-        ? `Refine this storyboard frame: ${frame.frame_description}. User feedback: ${feedback}. Maintain the cinematic, professional storyboard sketch style.`
-        : `Storyboard frame: ${frame.frame_description}. Cinematic, professional storyboard sketch style.`;
+        ? `Refine this storyboard frame: ${frame.frame_description}. 
+           Camera Angle: ${frame.camera_angle || 'N/A'}. 
+           Lighting: ${frame.lighting || 'N/A'}. 
+           Atmosphere: ${frame.atmosphere || 'N/A'}. 
+           User feedback: ${feedback}. 
+           Maintain the cinematic, professional storyboard sketch style.`
+        : `Storyboard frame: ${frame.frame_description}. 
+           Camera Angle: ${frame.camera_angle || 'N/A'}. 
+           Lighting: ${frame.lighting || 'N/A'}. 
+           Atmosphere: ${frame.atmosphere || 'N/A'}. 
+           Cinematic, professional storyboard sketch style.`;
 
       const imgResponse = await ai.models.generateContent({
         model: "gemini-2.5-flash-image",
@@ -787,7 +799,13 @@ Think D&AD. Think Cannes.`,
   };
 
   const addStoryboardFrame = () => {
-    setStoryboarderFrames(prev => [...prev, { frame_description: "", annotation: "" }]);
+    setStoryboarderFrames(prev => [...prev, { 
+      frame_description: "", 
+      annotation: "",
+      camera_angle: "",
+      lighting: "",
+      atmosphere: ""
+    }]);
   };
 
   const removeStoryboardFrame = (index: number) => {
@@ -844,7 +862,10 @@ Think D&AD. Think Cannes.`,
         
         For each frame, provide:
         - frame_description: A detailed visual description for AI image generation.
-        - annotation: Director's notes (camera, sound, text).`
+        - annotation: Director's notes (camera, sound, text).
+        - camera_angle: Suggestion for camera movement or angle (e.g., 'dolly shot', 'crane shot', 'low angle', 'close-up').
+        - lighting: Suggestion for lighting style (e.g., 'chiaroscuro', 'golden hour', 'high-key', 'neon').
+        - atmosphere: Suggestion for the mood or atmosphere (e.g., 'gritty', 'dreamy', 'clinical', 'vibrant').`
       ];
 
       // Add images as context if available
@@ -872,9 +893,12 @@ Think D&AD. Think Cannes.`,
                   type: Type.OBJECT,
                   properties: {
                     frame_description: { type: Type.STRING },
-                    annotation: { type: Type.STRING }
+                    annotation: { type: Type.STRING },
+                    camera_angle: { type: Type.STRING },
+                    lighting: { type: Type.STRING },
+                    atmosphere: { type: Type.STRING }
                   },
-                  required: ["frame_description", "annotation"]
+                  required: ["frame_description", "annotation", "camera_angle", "lighting", "atmosphere"]
                 }
               }
             },
@@ -2429,6 +2453,39 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                               placeholder="Describe the shot..."
                               className="w-full bg-transparent border-none p-0 text-sm text-[#e4e4e7] leading-relaxed font-medium focus:ring-0 resize-none h-20"
                             />
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[rgba(39,39,42,0.5)]">
+                            <div className="space-y-1">
+                              <label className="font-mono text-[8px] text-[#52525b] uppercase tracking-widest">Camera</label>
+                              <input 
+                                type="text"
+                                value={frame.camera_angle || ""}
+                                onChange={(e) => updateStoryboardFrame(i, { camera_angle: e.target.value })}
+                                placeholder="Dolly, Crane..."
+                                className="w-full bg-transparent border-none p-0 text-[10px] text-[#e4e4e7] focus:ring-0"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="font-mono text-[8px] text-[#52525b] uppercase tracking-widest">Lighting</label>
+                              <input 
+                                type="text"
+                                value={frame.lighting || ""}
+                                onChange={(e) => updateStoryboardFrame(i, { lighting: e.target.value })}
+                                placeholder="Golden hour..."
+                                className="w-full bg-transparent border-none p-0 text-[10px] text-[#e4e4e7] focus:ring-0"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="font-mono text-[8px] text-[#52525b] uppercase tracking-widest">Atmosphere</label>
+                              <input 
+                                type="text"
+                                value={frame.atmosphere || ""}
+                                onChange={(e) => updateStoryboardFrame(i, { atmosphere: e.target.value })}
+                                placeholder="Gritty, Dreamy..."
+                                className="w-full bg-transparent border-none p-0 text-[10px] text-[#e4e4e7] focus:ring-0"
+                              />
+                            </div>
                           </div>
                           
                           <div className="space-y-2 pt-4 border-t border-[rgba(39,39,42,0.5)]">
