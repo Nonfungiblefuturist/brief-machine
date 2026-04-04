@@ -40,7 +40,8 @@ import {
   ExternalLink,
   Save,
   Film,
-  FileImage
+  FileImage,
+  Camera
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -386,6 +387,26 @@ export default function App() {
   const [isExportingVideo, setIsExportingVideo] = useState(false);
   const [refiningFrameIndex, setRefiningFrameIndex] = useState<number | null>(null);
   const [refinementFeedback, setRefinementFeedback] = useState("");
+  const [isMultiShot, setIsMultiShot] = useState(false);
+  const [higgsfieldModel, setHiggsfieldModel] = useState<string>("Cinema Studio");
+  const [clickToAdFields, setClickToAdFields] = useState({
+    productUrl: "",
+    brandIntent: "",
+    visualAnchors: "",
+    targetPlatform: "IG Reels"
+  });
+  const [cameraPhysics, setCameraPhysics] = useState({
+    body: "ARRI Alexa LF",
+    lens: "Prime",
+    focalLength: "35mm",
+    movements: [] as string[]
+  });
+
+  const getCreditEstimate = (model: string, length: string) => {
+    const base = model === "Cinema Studio" ? 100 : model === "Sora 2" ? 80 : 50;
+    const multiplier = length === ":60s" ? 2 : length === ":30s" ? 1 : 0.5;
+    return Math.round(base * multiplier);
+  };
 
   // Auto-save Storyboard Draft
   useEffect(() => {
@@ -592,12 +613,28 @@ TARGET VIDEO LENGTH: ${videoLength}
 INSPIRATION MODE: ${inspiration.toUpperCase()}
 MODE: ${mode === "surreal" ? "SURREAL AI (Impossible Scenarios)" : "STANDARD STRATEGY"}
 
+HIGGSFIELD USER SELECTIONS:
+- Selected Model: ${higgsfieldModel}
+- Multi-Shot Sequence: ${isMultiShot ? "YES" : "NO"}
+- Camera Physics: 
+  - Body: ${cameraPhysics.body}
+  - Lens: ${cameraPhysics.lens}
+  - Focal Length: ${cameraPhysics.focalLength}
+  - Movements: ${cameraPhysics.movements.join(", ") || "None"}
+${inspiration === "ad" ? `
+CLICK-TO-AD FIELDS:
+- Product URL: ${clickToAdFields.productUrl}
+- Brand Intent: ${clickToAdFields.brandIntent}
+- Visual Anchors: ${clickToAdFields.visualAnchors}
+- Target Platform: ${clickToAdFields.targetPlatform}` : ""}
+
 ${pastPreferences ? `PAST HIGH-RATED CONCEPTS (Use these as inspiration for the style/tone the user likes):\n- ${pastPreferences}` : ""}
 
 TASK:
 1. Parse the USER BRIEF to identify the BRAND, CATEGORY, and the core TENSION/INSIGHT.
 2. Generate 3 award-caliber ad concepts (Deep Concepts).
 3. Generate 5 high-impact, one-line "Quick Fire" provocations specifically tailored to the TARGET VIDEO LENGTH.
+4. For each concept, ensure the 'higgsfield_config' reflects the user's selected model and camera physics, and if Multi-Shot is 'YES', provide a detailed shot breakdown.
 
 Think D&AD. Think Cannes.`,
         config: {
@@ -1904,6 +1941,208 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   ))}
                 </div>
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
+                    Higgsfield Model
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {["Sora 2", "Kling 3.0", "Veo 3.1", "Cinema Studio", "Click-to-Ad"].map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setHiggsfieldModel(m)}
+                        className={cn(
+                          "px-3 py-3 font-mono text-[9px] uppercase tracking-widest border transition-all",
+                          higgsfieldModel === m
+                            ? "bg-white text-black border-white"
+                            : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:border-zinc-700"
+                        )}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-zinc-900/30 border border-zinc-800">
+                    <span className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest">Est. Credit Cost:</span>
+                    <span className="font-display text-sm text-yellow-500">{getCreditEstimate(higgsfieldModel, videoLength)} Credits</span>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
+                    Sequence Type
+                  </label>
+                  <button
+                    onClick={() => setIsMultiShot(!isMultiShot)}
+                    className={cn(
+                      "w-full p-4 border text-left transition-all flex items-center justify-between",
+                      isMultiShot 
+                        ? "bg-white text-black border-white" 
+                        : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:border-zinc-700"
+                    )}
+                  >
+                    <div className="space-y-1">
+                      <div className="font-mono text-[10px] uppercase tracking-widest">Multi-Shot Sequence</div>
+                      <div className="text-[10px] opacity-70">Suggest a detailed shot breakdown</div>
+                    </div>
+                    <div className={cn(
+                      "w-10 h-5 rounded-full relative transition-colors",
+                      isMultiShot ? "bg-black" : "bg-zinc-800"
+                    )}>
+                      <div className={cn(
+                        "absolute top-1 w-3 h-3 rounded-full transition-all",
+                        isMultiShot ? "right-1 bg-white" : "left-1 bg-zinc-600"
+                      )} />
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Camera Physics Section */}
+              <div className="p-8 bg-zinc-900/30 border border-zinc-800 space-y-8">
+                <div className="flex items-center gap-2">
+                  <Camera size={14} className="text-zinc-500" />
+                  <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Camera Physics Layer</span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="space-y-3">
+                    <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Body</label>
+                    <select 
+                      value={cameraPhysics.body}
+                      onChange={(e) => setCameraPhysics({...cameraPhysics, body: e.target.value})}
+                      className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-zinc-400 outline-none focus:border-zinc-600"
+                    >
+                      {["ARRI Alexa LF", "RED V-Raptor", "Sony Venice 2", "Panavision Millennium DXL2"].map(b => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Lens Type</label>
+                    <select 
+                      value={cameraPhysics.lens}
+                      onChange={(e) => setCameraPhysics({...cameraPhysics, lens: e.target.value})}
+                      className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-zinc-400 outline-none focus:border-zinc-600"
+                    >
+                      {["Prime", "Anamorphic", "Zoom", "Macro", "Fish-eye"].map(l => (
+                        <option key={l} value={l}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-3">
+                    <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Focal Length</label>
+                    <select 
+                      value={cameraPhysics.focalLength}
+                      onChange={(e) => setCameraPhysics({...cameraPhysics, focalLength: e.target.value})}
+                      className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-zinc-400 outline-none focus:border-zinc-600"
+                    >
+                      {["14mm", "24mm", "35mm", "50mm", "85mm", "135mm"].map(f => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Simultaneous Movements (Max 3)</label>
+                  <div className="flex flex-wrap gap-2">
+                    {["Dolly Push", "Dolly Pull", "Pan Left", "Pan Right", "Tilt Up", "Tilt Down", "Crane Up", "Crane Down", "FPV Fly-through", "Handheld Shake"].map(m => (
+                      <button
+                        key={m}
+                        onClick={() => {
+                          const current = cameraPhysics.movements;
+                          if (current.includes(m)) {
+                            setCameraPhysics({...cameraPhysics, movements: current.filter(x => x !== m)});
+                          } else if (current.length < 3) {
+                            setCameraPhysics({...cameraPhysics, movements: [...current, m]});
+                          }
+                        }}
+                        className={cn(
+                          "px-3 py-1.5 font-mono text-[9px] uppercase tracking-widest border transition-all",
+                          cameraPhysics.movements.includes(m)
+                            ? "bg-white text-black border-white"
+                            : "bg-zinc-950 text-zinc-600 border-zinc-800 hover:border-zinc-700"
+                        )}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Click-to-Ad Section (Conditional) */}
+              <AnimatePresence>
+                {inspiration === "ad" && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="p-8 bg-cyan-950/10 border border-cyan-900/30 space-y-8">
+                      <div className="flex items-center gap-2">
+                        <Zap size={14} className="text-cyan-400" />
+                        <span className="font-mono text-[10px] text-cyan-400 uppercase tracking-widest">Click-to-Ad Configuration</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-3">
+                          <label className="font-mono text-[9px] text-cyan-800 uppercase tracking-widest">Product URL</label>
+                          <input 
+                            type="text"
+                            value={clickToAdFields.productUrl}
+                            onChange={(e) => setClickToAdFields({...clickToAdFields, productUrl: e.target.value})}
+                            placeholder="https://brand.com/product"
+                            className="w-full bg-zinc-950 border border-cyan-900/30 px-4 py-3 text-sm text-cyan-400 outline-none focus:border-cyan-500 transition-colors placeholder:text-cyan-900"
+                          />
+                        </div>
+                        <div className="space-y-3">
+                          <label className="font-mono text-[9px] text-cyan-800 uppercase tracking-widest">Target Platform</label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {["IG Reels", "TikTok", "YouTube Shorts", "Meta Feed"].map(p => (
+                              <button
+                                key={p}
+                                onClick={() => setClickToAdFields({...clickToAdFields, targetPlatform: p})}
+                                className={cn(
+                                  "px-3 py-2 font-mono text-[9px] uppercase tracking-widest border transition-all",
+                                  clickToAdFields.targetPlatform === p
+                                    ? "bg-cyan-400 text-black border-cyan-400"
+                                    : "bg-zinc-950 text-cyan-900 border-cyan-900/30 hover:border-cyan-700"
+                                )}
+                              >
+                                {p}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <label className="font-mono text-[9px] text-cyan-800 uppercase tracking-widest">Brand Intent Summary</label>
+                        <textarea 
+                          value={clickToAdFields.brandIntent}
+                          onChange={(e) => setClickToAdFields({...clickToAdFields, brandIntent: e.target.value})}
+                          placeholder="What is the primary goal of this ad? (e.g. Drive sales for new winter collection)"
+                          className="w-full bg-zinc-950 border border-cyan-900/30 px-4 py-3 text-sm text-cyan-400 outline-none focus:border-cyan-500 transition-colors placeholder:text-cyan-900 min-h-[80px] resize-none"
+                        />
+                      </div>
+
+                      <div className="space-y-3">
+                        <label className="font-mono text-[9px] text-cyan-800 uppercase tracking-widest">Visual Anchors</label>
+                        <textarea 
+                          value={clickToAdFields.visualAnchors}
+                          onChange={(e) => setClickToAdFields({...clickToAdFields, visualAnchors: e.target.value})}
+                          placeholder="Key visual elements to maintain (e.g. Logo placement, specific product color)"
+                          className="w-full bg-zinc-950 border border-cyan-900/30 px-4 py-3 text-sm text-cyan-400 outline-none focus:border-cyan-500 transition-colors placeholder:text-cyan-900 min-h-[80px] resize-none"
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <button
                 onClick={generateConcepts}
