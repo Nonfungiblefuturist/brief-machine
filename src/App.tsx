@@ -65,6 +65,12 @@ For each concept provide:
 4. CULTURAL HOOKS (based on current 2025-2026 landscape)
 Tag each concept with 2-3 specific and niche cultural currents that are highly relevant to the idea, in addition to broader ones. For each hook, provide a brief (1-2 sentence) justification for its inclusion, explaining how the concept resonates with that specific cultural undercurrent.
 
+INSPIRATION MODES:
+- ORIGINAL: Focus on pure strategic logic and human insight.
+- CINEMATIC / MOVIE STYLE: Draw inspiration from iconic film genres, directors (e.g., Wes Anderson, Nolan, Kubrick), or specific cinematic tropes. The concept should feel like a "pitch pilot" or a teaser for a larger narrative.
+- AD REMIX: Take inspiration from classic, award-winning ad campaigns (e.g., "Think Different", "Just Do It", "The Man Your Man Could Smell Like") and remix their core mechanics for the current brand and cultural context.
+- VIRAL / FAR-FETCHED: Cook up ideas that are intentionally provocative, surreal, or "too far" to be ignored. Focus on "viral-worthy" mechanics that demand attention through sheer audacity or experimental AI execution.
+
 RULES:
 - Never generate safe, obvious, or expected ideas
 - Never default to "emotional storytelling" as a concept — that's a TECHNIQUE, not an IDEA
@@ -104,19 +110,6 @@ For each trend, provide:
 - A "viral_concept" — A specific, high-impact idea for a video or stunt that leverages this trend. It should be designed for shareability.
 - A "video_hook" — A 3-second hook for social media (TikTok/Reels) to grab attention immediately.
 - A "ai_execution_methods" — Detail specific AI-driven methods (e.g., using specific tools like Midjourney, Runway, ElevenLabs) to execute the viral concept and video hook on a minimal budget.`;
-
-const QUICK_FIRE_PROMPT = `You are an elite creative director. You generate high-impact, one-line AI-native advertising ideas that are designed to go viral. 
-
-The user has specified a target DURATION/FORMAT: {duration_context}
-
-Each idea must:
-- Be a single, provocative sentence.
-- Leverage AI-native surrealism or impossible scenarios.
-- Solve a cultural tension for the brand.
-- Be immediately "visualizable" in the mind.
-- Be specifically tailored to the requested DURATION/FORMAT (e.g., if it's 15s, it must be a quick punch; if it's a pitch pilot, it must feel like a world-building teaser).
-
-Format: A list of 5 one-line provocations.`;
 
 // --- Types ---
 
@@ -189,17 +182,12 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "quickfire">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
-  const [brand, setBrand] = useState("");
-  const [category, setCategory] = useState("");
-  const [objective, setObjective] = useState("");
-  const [audience, setAudience] = useState("");
-  const [constraint, setConstraint] = useState("");
+  const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
+  const [inspiration, setInspiration] = useState<"original" | "movie" | "ad" | "viral">("original");
   const [selectedConcepts, setSelectedConcepts] = useState<number[]>([]);
-  const [quickFireInput, setQuickFireInput] = useState("");
-  const [quickFireFormat, setQuickFireFormat] = useState("30s");
   const [quickFireResults, setQuickFireResults] = useState<string[]>([]);
   const [results, setResults] = useState<Results | null>(null);
   const [trends, setTrends] = useState<Trend[] | null>(null);
@@ -232,22 +220,25 @@ export default function App() {
   }, [view]);
 
   const generateConcepts = async () => {
-    if (!brand.trim()) return;
+    if (!briefInput.trim()) return;
     setError(null);
     setView("loading");
     
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      
+      // Combined prompt for Strategic Foundation, 3 Deep Concepts, and 5 Quick Provocations
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
-        contents: `Generate 3 award-caliber ad concepts for:
-BRAND: ${brand}
-CATEGORY: ${category || "Not specified"}
-OBJECTIVE: ${objective || "Brand fame / cultural relevance"}
-TARGET AUDIENCE: ${audience || "Culturally engaged 18-35"}
-CONSTRAINTS/CONTEXT: ${constraint || "None"}
+        contents: `USER BRIEF / INPUT: ${briefInput}
 TARGET VIDEO LENGTH: ${videoLength}
+INSPIRATION MODE: ${inspiration.toUpperCase()}
 MODE: ${mode === "surreal" ? "SURREAL AI (Impossible Scenarios)" : "STANDARD STRATEGY"}
+
+TASK:
+1. Parse the USER BRIEF to identify the BRAND, CATEGORY, and the core TENSION/INSIGHT.
+2. Generate 3 award-caliber ad concepts (Deep Concepts).
+3. Generate 5 high-impact, one-line "Quick Fire" provocations specifically tailored to the TARGET VIDEO LENGTH.
 
 Think D&AD. Think Cannes.`,
         config: {
@@ -260,6 +251,10 @@ Think D&AD. Think Cannes.`,
               category: { type: Type.STRING },
               tension: { type: Type.STRING },
               insight: { type: Type.STRING },
+              quick_fire: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING }
+              },
               concepts: {
                 type: Type.ARRAY,
                 items: {
@@ -303,13 +298,14 @@ Think D&AD. Think Cannes.`,
                 }
               }
             },
-            required: ["brand", "category", "tension", "insight", "concepts"]
+            required: ["brand", "category", "tension", "insight", "concepts", "quick_fire"]
           }
         }
       });
 
       const parsed = JSON.parse(response.text || "{}");
       setResults(parsed);
+      setQuickFireResults(parsed.quick_fire || []);
       setExpandedConcept(0);
       setSelectedConcepts([]);
       setView("results");
@@ -579,42 +575,6 @@ Think D&AD. Think Cannes.`,
     }
   };
 
-  const generateQuickFire = async () => {
-    if (!quickFireInput.trim()) return;
-    setError(null);
-    setView("loading");
-    
-    try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
-        contents: `Generate 5 one-line viral AI ad/video ideas for: ${quickFireInput}. 
-        Target Format/Duration: ${quickFireFormat}`,
-        config: {
-          systemInstruction: QUICK_FIRE_PROMPT.replace("{duration_context}", quickFireFormat),
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              ideas: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              }
-            },
-            required: ["ideas"]
-          }
-        }
-      });
-
-      const parsed = JSON.parse(response.text || "{}");
-      setQuickFireResults(parsed.ideas || []);
-      setView("quickfire");
-    } catch (e) {
-      console.error(e);
-      setError("Quick Fire failed. The creative sparks are damp.");
-      setView("input");
-    }
-  };
 
   return (
     <div className="min-h-screen relative overflow-x-hidden selection:bg-white selection:text-black">
@@ -647,8 +607,7 @@ Think D&AD. Think Cannes.`,
 
           <nav className="flex flex-wrap gap-2 mt-8">
             {[
-              { id: "input", label: "Generate", icon: Sparkles },
-              { id: "quickfire", label: "Quick Fire", icon: Zap },
+              { id: "input", label: "Creative Engine", icon: Zap },
               { id: "trends", label: "Trend Scanner", icon: Search, action: fetchTrends },
               { id: "prompt", label: "Prompt DNA", icon: Code },
             ].map((item) => (
@@ -688,89 +647,6 @@ Think D&AD. Think Cannes.`,
 
         {/* Views */}
         <main>
-          {/* QUICK FIRE VIEW */}
-          {view === "quickfire" && (
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="space-y-8"
-            >
-              <div className="bg-zinc-900/50 border border-zinc-800 p-8">
-                <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest mb-6">
-                  Quick Fire Mode
-                </div>
-                <div className="space-y-6">
-                  <div className="flex gap-4">
-                    <input 
-                      type="text"
-                      value={quickFireInput}
-                      onChange={(e) => setQuickFireInput(e.target.value)}
-                      placeholder="Enter brand or topic for instant AI ideas..."
-                      className="flex-1 bg-zinc-950 border border-zinc-800 px-4 py-3 text-sm text-zinc-200 outline-none focus:border-zinc-600 transition-colors"
-                    />
-                    <button 
-                      onClick={generateQuickFire}
-                      className="bg-white text-black px-6 py-3 font-mono text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-colors"
-                    >
-                      Fire
-                    </button>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {["15s", "30s", "1m", "2m", "Pitch Pilot / Teaser"].map((f) => (
-                      <button
-                        key={f}
-                        onClick={() => setQuickFireFormat(f)}
-                        className={cn(
-                          "px-3 py-1.5 font-mono text-[9px] uppercase tracking-widest border transition-all",
-                          quickFireFormat === f
-                            ? "bg-zinc-200 text-black border-zinc-200"
-                            : "bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600"
-                        )}
-                      >
-                        {f}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {quickFireResults.map((idea, idx) => (
-                  <motion.div 
-                    key={idx}
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.1 }}
-                    className="bg-zinc-900/30 border border-zinc-800 p-6 flex gap-6 items-center group hover:border-zinc-700 transition-all"
-                  >
-                    <span className="font-mono text-[10px] text-zinc-700">0{idx + 1}</span>
-                    <p className="font-display italic text-xl text-white flex-1 leading-tight">
-                      {idea}
-                    </p>
-                    <button 
-                      onClick={() => copyToClipboard(idea)}
-                      className="text-zinc-700 group-hover:text-zinc-400 transition-colors"
-                    >
-                      <Copy size={16} />
-                    </button>
-                  </motion.div>
-                ))}
-              </div>
-
-              {quickFireResults.length > 0 && (
-                <div className="flex justify-center">
-                  <button
-                    onClick={() => setView("input")}
-                    className="font-mono text-[10px] text-zinc-500 hover:text-white transition-colors"
-                  >
-                    Back to Full Brief
-                  </button>
-                </div>
-              )}
-            </motion.div>
-          )}
-
           {/* INPUT VIEW */}
           {view === "input" && (
             <motion.div 
@@ -778,40 +654,71 @@ Think D&AD. Think Cannes.`,
               animate={{ opacity: 1 }}
               className="space-y-8"
             >
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <InputGroup 
-                  label="Brand *" 
-                  placeholder="e.g. Patagonia, Duolingo, Liquid Death"
-                  value={brand}
-                  onChange={setBrand}
-                  mono
-                />
-                <InputGroup 
-                  label="Category" 
-                  placeholder="e.g. Outdoor, EdTech, Beverage"
-                  value={category}
-                  onChange={setCategory}
-                  mono
+              <div className="space-y-4">
+                <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
+                  The Brief / Brand / Topic
+                </label>
+                <textarea 
+                  value={briefInput}
+                  onChange={(e) => setBriefInput(e.target.value)}
+                  placeholder="e.g. Patagonia: Make Gen Z care about climate without guilt-tripping them. Focus on the tension between wanting to help and feeling powerless."
+                  className="w-full bg-zinc-900/50 border border-zinc-800 px-6 py-6 text-xl font-display italic text-zinc-200 outline-none focus:border-zinc-600 transition-colors placeholder:text-zinc-800 min-h-[160px] resize-none"
                 />
               </div>
-              <InputGroup 
-                label="Objective / Tension" 
-                placeholder="e.g. Make Gen Z care about climate without guilt-tripping them"
-                value={objective}
-                onChange={setObjective}
-              />
-              <InputGroup 
-                label="Target Audience" 
-                placeholder="e.g. Burnt-out millennials seeking authenticity"
-                value={audience}
-                onChange={setAudience}
-              />
-              <InputGroup 
-                label="Constraints / Context" 
-                placeholder="e.g. Producible with AI. No celebrity. Zero budget."
-                value={constraint}
-                onChange={setConstraint}
-              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-4">
+                  <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
+                    Inspiration Source
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "original", label: "Original", icon: <Zap size={12} /> },
+                      { id: "movie", label: "Cinematic", icon: <Search size={12} /> },
+                      { id: "ad", label: "Ad Remix", icon: <RefreshCcw size={12} /> },
+                      { id: "viral", label: "Viral/Far-fetched", icon: <Sparkles size={12} /> },
+                    ].map((i) => (
+                      <button
+                        key={i.id}
+                        onClick={() => setInspiration(i.id as any)}
+                        className={cn(
+                          "p-3 border text-left transition-all flex flex-col gap-2",
+                          inspiration === i.id 
+                            ? "bg-white text-black border-white" 
+                            : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:border-zinc-700"
+                        )}
+                      >
+                        <div className="flex items-center justify-between">
+                          {i.icon}
+                          <div className="font-mono text-[8px] uppercase tracking-widest">{i.label}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
+                    Target Video Length
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[":15s", ":30s", ":60s", "Long Form", "Teaser", "Pilot"].map((l) => (
+                      <button
+                        key={l}
+                        onClick={() => setVideoLength(l)}
+                        className={cn(
+                          "px-3 py-3 font-mono text-[9px] uppercase tracking-widest border transition-all",
+                          videoLength === l
+                            ? "bg-white text-black border-white"
+                            : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:border-zinc-700"
+                        )}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
 
               <div className="space-y-4">
                 <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
@@ -839,39 +746,17 @@ Think D&AD. Think Cannes.`,
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
-                  Target Video Length
-                </label>
-                <div className="flex flex-wrap gap-2">
-                  {[":15s", ":30s", ":60s", "Long Form", "Teaser"].map((l) => (
-                    <button
-                      key={l}
-                      onClick={() => setVideoLength(l)}
-                      className={cn(
-                        "px-4 py-2 font-mono text-[10px] uppercase tracking-widest border transition-all",
-                        videoLength === l
-                          ? "bg-white text-black border-white"
-                          : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:border-zinc-700"
-                      )}
-                    >
-                      {l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               <button
                 onClick={generateConcepts}
-                disabled={!brand.trim()}
+                disabled={!briefInput.trim()}
                 className={cn(
-                  "w-full py-6 font-display italic text-2xl transition-all duration-500 flex items-center justify-center gap-4 group",
-                  brand.trim() 
+                  "w-full py-8 font-display italic text-3xl transition-all duration-500 flex items-center justify-center gap-4 group shadow-2xl",
+                  briefInput.trim() 
                     ? "bg-white text-black hover:bg-zinc-200" 
                     : "bg-zinc-900 text-zinc-700 cursor-not-allowed"
                 )}
               >
-                Generate Concepts
+                Fire Creative Engine
                 <ArrowRight className="group-hover:translate-x-2 transition-transform" />
               </button>
             </motion.div>
@@ -930,6 +815,68 @@ Think D&AD. Think Cannes.`,
                   </div>
                 </div>
               </div>
+
+              {/* Quick Fire Provocations */}
+              {quickFireResults.length > 0 && (
+                <div className="space-y-4">
+                  <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">
+                    Quick Fire Provocations
+                  </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    {quickFireResults.map((idea, idx) => (
+                      <motion.div 
+                        key={idx}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                        className="bg-zinc-900/30 border border-zinc-800 p-6 flex gap-6 items-center group hover:border-zinc-700 transition-all"
+                      >
+                        <span className="font-mono text-[10px] text-zinc-700">0{idx + 1}</span>
+                        <p className="font-display italic text-xl text-white flex-1 leading-tight">
+                          {idea}
+                        </p>
+                        <button 
+                          onClick={() => copyToClipboard(idea)}
+                          className="text-zinc-600 group-hover:text-zinc-400 transition-colors"
+                        >
+                          <Copy size={16} />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Quick Fire Provocations */}
+              {quickFireResults.length > 0 && (
+                <div className="space-y-4">
+                  <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">
+                    Quick Fire Provocations
+                  </div>
+                  <div className="grid grid-cols-1 gap-3">
+                    {quickFireResults.map((idea, idx) => (
+                      <motion.div 
+                        key={idx}
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                        className="bg-zinc-900/30 border border-zinc-800 p-6 flex gap-6 items-center group hover:border-zinc-700 transition-all"
+                      >
+                        <span className="font-mono text-[10px] text-zinc-700">0{idx + 1}</span>
+                        <p className="font-display italic text-xl text-white flex-1 leading-tight">
+                          {idea}
+                        </p>
+                        <button 
+                          onClick={() => copyToClipboard(idea)}
+                          className="text-zinc-600 group-hover:text-zinc-400 transition-colors"
+                        >
+                          <Copy size={16} />
+                        </button>
+                      </motion.div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Concepts List */}
               <div className="space-y-4">
@@ -1035,7 +982,7 @@ Think D&AD. Think Cannes.`,
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.1 }}
                     onClick={() => {
-                      setObjective(trend.brief_starter);
+                      setBriefInput(trend.brief_starter);
                       setView("input");
                     }}
                     className="group bg-zinc-900/30 border border-zinc-800 p-8 hover:border-zinc-600 transition-all cursor-pointer"
@@ -1104,25 +1051,6 @@ Think D&AD. Think Cannes.`,
 
 // --- Helper Components ---
 
-function InputGroup({ label, placeholder, value, onChange, mono }: { label: string; placeholder: string; value: string; onChange: (v: string) => void; mono?: boolean }) {
-  return (
-    <div className="space-y-2">
-      <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
-        {label}
-      </label>
-      <input 
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={cn(
-          "w-full bg-zinc-900/50 border border-zinc-800 px-4 py-4 text-zinc-200 outline-none focus:border-zinc-600 transition-colors placeholder:text-zinc-700",
-          mono ? "font-mono text-xs" : "text-sm"
-        )}
-      />
-    </div>
-  );
-}
 
 function ComparisonView({ concepts, onClose }: { concepts: Concept[]; onClose: () => void }) {
   return (
