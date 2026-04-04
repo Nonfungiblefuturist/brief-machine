@@ -218,9 +218,11 @@ export default function App() {
   const [isGeneratingVariations, setIsGeneratingVariations] = useState<number | null>(null);
   const [filterRating, setFilterRating] = useState<number>(0);
   const [storyboarderInput, setStoryboarderInput] = useState("");
+  const [storyboarderProjectName, setStoryboarderProjectName] = useState("Untitled Project");
   const [storyboarderImages, setStoryboarderImages] = useState<string[]>([]);
   const [storyboarderFrames, setStoryboarderFrames] = useState<StoryboardFrame[]>([]);
   const [isGeneratingStoryboarder, setIsGeneratingStoryboarder] = useState(false);
+  const [isGeneratingIndividualFrame, setIsGeneratingIndividualFrame] = useState<number | null>(null);
 
   useEffect(() => {
     const checkKey = async () => {
@@ -377,6 +379,84 @@ Think D&AD. Think Cannes.`,
     }
   };
 
+  const [isExporting, setIsExporting] = useState(false);
+  const storyboardRef = useRef<HTMLDivElement>(null);
+
+  const exportStoryboard = async () => {
+    if (!storyboardRef.current || storyboarderFrames.length === 0) return;
+    setIsExporting(true);
+    try {
+      const canvas = await html2canvas(storyboardRef.current, {
+        backgroundColor: '#000000',
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        allowTaint: true
+      });
+
+      const imgData = canvas.toDataURL('image/jpeg', 1.0);
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'px',
+        format: [canvas.width, canvas.height]
+      });
+
+      pdf.addImage(imgData, 'JPEG', 0, 0, canvas.width, canvas.height);
+      const safeName = storyboarderProjectName.replace(/[^a-z0-9]/gi, '-').toLowerCase();
+      pdf.save(`${safeName}-storyboard-${Date.now()}.pdf`);
+    } catch (e) {
+      console.error("Export failed", e);
+      setError("Export failed. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const generateIndividualFrame = async (index: number) => {
+    const frame = storyboarderFrames[index];
+    if (!frame.frame_description) return;
+    
+    setIsGeneratingIndividualFrame(index);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const imgResponse = await ai.models.generateContent({
+        model: "gemini-2.5-flash-image",
+        contents: `Storyboard frame: ${frame.frame_description}. Cinematic, professional storyboard sketch style.`,
+        config: {
+          imageConfig: { aspectRatio: "16:9" }
+        }
+      });
+      
+      const imgPart = imgResponse.candidates?.[0]?.content?.parts.find(p => p.inlineData);
+      if (imgPart) {
+        const newFrames = [...storyboarderFrames];
+        newFrames[index] = { ...frame, visual_url: `data:image/png;base64,${imgPart.inlineData.data}` };
+        setStoryboarderFrames(newFrames);
+      }
+    } catch (e) {
+      console.error("Frame visualization failed", e);
+      setError("Frame visualization failed.");
+    } finally {
+      setIsGeneratingIndividualFrame(null);
+    }
+  };
+
+  const addStoryboardFrame = () => {
+    setStoryboarderFrames(prev => [...prev, { frame_description: "", annotation: "" }]);
+  };
+
+  const removeStoryboardFrame = (index: number) => {
+    setStoryboarderFrames(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const updateStoryboardFrame = (index: number, updates: Partial<StoryboardFrame>) => {
+    setStoryboarderFrames(prev => {
+      const next = [...prev];
+      next[index] = { ...next[index], ...updates };
+      return next;
+    });
+  };
+
   const generateStoryboarder = async () => {
     if (!storyboarderInput.trim() && storyboarderImages.length === 0) return;
     setIsGeneratingStoryboarder(true);
@@ -386,7 +466,9 @@ Think D&AD. Think Cannes.`,
       const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       
       const contents: any[] = [
-        `TASK: Generate a 4-frame storyboard based on the following input.
+        `TASK: Generate a storyboard based on the following input. 
+        Determine the appropriate number of shots (between 4 and 12) to tell the story effectively.
+        Also, provide a creative and concise project name for this storyboard.
         INPUT: ${storyboarderInput}
         
         For each frame, provide:
@@ -412,6 +494,7 @@ Think D&AD. Think Cannes.`,
           responseSchema: {
             type: Type.OBJECT,
             properties: {
+              project_name: { type: Type.STRING },
               frames: {
                 type: Type.ARRAY,
                 items: {
@@ -424,7 +507,7 @@ Think D&AD. Think Cannes.`,
                 }
               }
             },
-            required: ["frames"]
+            required: ["frames", "project_name"]
           }
         }
       });
@@ -432,8 +515,17 @@ Think D&AD. Think Cannes.`,
       const parsed = JSON.parse(response.text || "{}");
       const frames = parsed.frames || [];
       
-      // Now visualize each frame
-      const visualizedFrames = await Promise.all(frames.map(async (frame: any) => {
+      if (parsed.project_name) {
+        setStoryboarderProjectName(parsed.project_name);
+      }
+      
+      // Set the text frames first so the user sees them immediately
+      setStoryboarderFrames(frames);
+      
+      // Now visualize each frame one by one (shot by shot)
+      for (let i = 0; i < frames.length; i++) {
+        const frame = frames[i];
+        setIsGeneratingIndividualFrame(i);
         try {
           const imgResponse = await ai.models.generateContent({
             model: "gemini-2.5-flash-image",
@@ -444,17 +536,19 @@ Think D&AD. Think Cannes.`,
           });
           
           const imgPart = imgResponse.candidates?.[0]?.content?.parts.find(p => p.inlineData);
-          return {
-            ...frame,
-            visual_url: imgPart ? `data:image/png;base64,${imgPart.inlineData.data}` : undefined
-          };
+          if (imgPart) {
+            setStoryboarderFrames(prev => {
+              const next = [...prev];
+              next[i] = { ...next[i], visual_url: `data:image/png;base64,${imgPart.inlineData.data}` };
+              return next;
+            });
+          }
         } catch (e) {
-          console.error("Frame visualization failed", e);
-          return frame;
+          console.error(`Frame ${i} visualization failed`, e);
+        } finally {
+          setIsGeneratingIndividualFrame(null);
         }
-      }));
-
-      setStoryboarderFrames(visualizedFrames);
+      }
     } catch (e) {
       console.error(e);
       setError("Storyboard generation failed. The artist is on a coffee break.");
@@ -1522,6 +1616,18 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 </div>
 
                 <div className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Project Name</label>
+                      <input 
+                        type="text"
+                        value={storyboarderProjectName}
+                        onChange={(e) => setStoryboarderProjectName(e.target.value)}
+                        className="w-full bg-black/50 border border-zinc-800 p-4 text-white font-display text-lg focus:border-white focus:outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">The Script / Story</label>
                     <textarea 
@@ -1580,36 +1686,130 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               </div>
 
               {storyboarderFrames.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {storyboarderFrames.map((frame, i) => (
-                    <motion.div 
-                      key={i}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.1 }}
-                      className="space-y-4"
-                    >
-                      <div className="relative aspect-video bg-zinc-950 border border-zinc-800 overflow-hidden group">
-                        {frame.visual_url ? (
-                          <img src={frame.visual_url} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-800 font-mono text-[10px] uppercase tracking-widest">
-                            Frame 0{i+1}
-                          </div>
-                        )}
-                        <div className="absolute top-4 left-4 bg-black/80 px-3 py-1 font-mono text-xs text-white border border-white/10">0{i+1}</div>
-                      </div>
-                      <div className="space-y-2 p-4 bg-zinc-900/30 border border-zinc-800">
-                        <p className="text-sm text-zinc-200 leading-relaxed font-medium">{frame.frame_description}</p>
-                        <div className="flex gap-2 items-start pt-2 border-t border-zinc-800/50">
-                          <div className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest pt-0.5 shrink-0">Director's Note:</div>
-                          <p className="text-[10px] text-zinc-500 italic leading-relaxed">{frame.annotation}</p>
+                <div className="space-y-8">
+                  <div className="flex justify-between items-center">
+                    <h3 className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Visual Sequence</h3>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={exportStoryboard}
+                        disabled={isExporting}
+                        className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                      >
+                        {isExporting ? <RefreshCcw size={12} className="animate-spin" /> : <Download size={12} />}
+                        Export PDF
+                      </button>
+                      <button 
+                        onClick={addStoryboardFrame}
+                        className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                      >
+                        <Plus size={12} />
+                        Add Shot
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div ref={storyboardRef} className="space-y-8 p-12 bg-[#000000] border border-[#27272a]">
+                    <div className="border-b border-[#27272a] pb-8 mb-8">
+                      <h2 className="font-display text-4xl text-[#ffffff] italic mb-2">{storyboarderProjectName}</h2>
+                      <div className="flex justify-between items-end">
+                        <p className="font-mono text-[10px] text-[#71717a] uppercase tracking-widest max-w-2xl">
+                          {storyboarderInput.slice(0, 200)}{storyboarderInput.length > 200 ? '...' : ''}
+                        </p>
+                        <div className="text-right">
+                          <p className="font-mono text-[10px] text-[#52525b] uppercase tracking-widest">Generated By</p>
+                          <p className="font-display text-lg text-[#ffffff] italic">Brief Machine AI</p>
                         </div>
                       </div>
-                    </motion.div>
-                  ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                      {storyboarderFrames.map((frame, i) => (
+                      <motion.div 
+                        key={i}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: i * 0.1 }}
+                        className="space-y-4 group/frame"
+                      >
+                        <div className="relative aspect-video bg-[#09090b] border border-[#27272a] overflow-hidden group">
+                          {frame.visual_url ? (
+                            <img src={frame.visual_url} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-[rgba(24,24,27,0.5)]">
+                              <div className="text-[#27272a] font-mono text-[10px] uppercase tracking-widest">
+                                Frame 0{i+1}
+                              </div>
+                              <button
+                                onClick={() => generateIndividualFrame(i)}
+                                disabled={isGeneratingIndividualFrame === i || !frame.frame_description}
+                                className="px-4 py-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[#71717a] font-mono text-[10px] uppercase tracking-widest hover:bg-[#ffffff] hover:text-[#000000] transition-all flex items-center gap-2"
+                                data-html2canvas-ignore="true"
+                              >
+                                {isGeneratingIndividualFrame === i ? <RefreshCcw size={10} className="animate-spin" /> : <Sparkles size={10} />}
+                                Generate Image
+                              </button>
+                            </div>
+                          )}
+                          <div className="absolute top-4 left-4 bg-[rgba(0,0,0,0.8)] px-3 py-1 font-mono text-xs text-[#ffffff] border border-[rgba(255,255,255,0.1)]">0{i+1}</div>
+                          
+                          <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity" data-html2canvas-ignore="true">
+                            {frame.visual_url && (
+                              <button 
+                                onClick={() => generateIndividualFrame(i)}
+                                disabled={isGeneratingIndividualFrame === i}
+                                className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ffffff] hover:text-[#000000] transition-all"
+                                title="Regenerate Image"
+                              >
+                                <RefreshCcw size={14} className={isGeneratingIndividualFrame === i ? "animate-spin" : ""} />
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => removeStoryboardFrame(i)}
+                              className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ef4444] transition-all"
+                              title="Remove Shot"
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-4 p-6 bg-[rgba(24,24,27,0.3)] border border-[#27272a]">
+                          <div className="space-y-2">
+                            <label className="font-mono text-[9px] text-[#52525b] uppercase tracking-widest">Visual Description</label>
+                            <textarea 
+                              value={frame.frame_description}
+                              onChange={(e) => updateStoryboardFrame(i, { frame_description: e.target.value })}
+                              placeholder="Describe the shot..."
+                              className="w-full bg-transparent border-none p-0 text-sm text-[#e4e4e7] leading-relaxed font-medium focus:ring-0 resize-none h-20"
+                            />
+                          </div>
+                          
+                          <div className="space-y-2 pt-4 border-t border-[rgba(39,39,42,0.5)]">
+                            <label className="font-mono text-[9px] text-[#52525b] uppercase tracking-widest">Director's Note</label>
+                            <textarea 
+                              value={frame.annotation}
+                              onChange={(e) => updateStoryboardFrame(i, { annotation: e.target.value })}
+                              placeholder="Camera moves, sound, text..."
+                              className="w-full bg-transparent border-none p-0 text-[10px] text-[#71717a] italic leading-relaxed focus:ring-0 resize-none h-12"
+                            />
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
                 </div>
-              )}
+
+                <div className="flex justify-center pt-8" data-html2canvas-ignore="true">
+                  <button 
+                    onClick={addStoryboardFrame}
+                    className="font-mono text-[10px] uppercase tracking-widest px-8 py-4 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+                  >
+                    <Plus size={12} />
+                    Add New Shot
+                  </button>
+                </div>
+              </div>
+            )}
             </motion.div>
           )}
 
