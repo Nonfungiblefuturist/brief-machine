@@ -201,12 +201,13 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
   const [inspiration, setInspiration] = useState<"original" | "movie" | "ad" | "viral">("original");
   const [selectedConcepts, setSelectedConcepts] = useState<number[]>([]);
+  const [selectedTrends, setSelectedTrends] = useState<number[]>([]);
   const [quickFireResults, setQuickFireResults] = useState<string[]>([]);
   const [results, setResults] = useState<Results | null>(null);
   const [trends, setTrends] = useState<Trend[] | null>(null);
@@ -948,6 +949,84 @@ Think D&AD. Think Cannes.`,
     doc.save(`${(concept.selected_title || concept.name).replace(/\s+/g, '_')}_Concept.pdf`);
   };
 
+  const exportShortlistToPDF = async () => {
+    const doc = new jsPDF();
+    const margin = 20;
+    let y = 20;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(24);
+    doc.text("CREATIVE SHORTLIST", margin, y);
+    y += 15;
+
+    if (selectedTrends.length > 0 && trends) {
+      doc.setFontSize(16);
+      doc.text("TRENDS & CULTURAL INSIGHTS", margin, y);
+      y += 10;
+      selectedTrends.forEach((idx) => {
+        const trend = trends[idx];
+        if (y > 260) { doc.addPage(); y = 20; }
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text(trend.name.toUpperCase(), margin, y);
+        y += 7;
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        const lines = doc.splitTextToSize(trend.why_it_matters, 170);
+        doc.text(lines, margin, y);
+        y += (lines.length * 5) + 10;
+      });
+      y += 10;
+    }
+
+    if (selectedConcepts.length > 0 && results) {
+      if (y > 240) { doc.addPage(); y = 20; }
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text("STRATEGIC CONCEPTS", margin, y);
+      y += 10;
+      selectedConcepts.forEach((idx) => {
+        const concept = results.concepts[idx];
+        if (y > 240) { doc.addPage(); y = 20; }
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text(concept.name.toUpperCase(), margin, y);
+        y += 7;
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "italic");
+        const ideaLines = doc.splitTextToSize(`"${concept.idea}"`, 170);
+        doc.text(ideaLines, margin, y);
+        y += (ideaLines.length * 5) + 7;
+        doc.setFont("helvetica", "normal");
+        const execLines = doc.splitTextToSize(`Execution: ${concept.execution}`, 170);
+        doc.text(execLines, margin, y);
+        y += (execLines.length * 5) + 15;
+      });
+    }
+
+    if (storyboardRef.current && storyboarderFrames.length > 0) {
+      doc.addPage();
+      const canvas = await html2canvas(storyboardRef.current, {
+        backgroundColor: '#000000',
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        allowTaint: true
+      });
+      const imgData = canvas.toDataURL('image/jpeg', 0.8);
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const imgWidth = pageWidth - (2 * margin);
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(16);
+      doc.text("STORYBOARD", margin, 20);
+      doc.addImage(imgData, 'JPEG', margin, 30, imgWidth, imgHeight);
+    }
+
+    doc.save(`Brief_Machine_Shortlist_${Date.now()}.pdf`);
+  };
+
   const visualizeConcept = async (index: number) => {
     if (!results) return;
     const concept = results.concepts[index];
@@ -1174,6 +1253,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               { id: "input", label: "Creative Engine", icon: Zap },
               { id: "trends", label: "Trend Scanner", icon: Search, action: fetchTrends },
               { id: "storyboarder", label: "Auto Storyboarder", icon: Layout },
+              { id: "shortlist", label: "Shortlist", icon: Check },
               { id: "prompt", label: "Prompt DNA", icon: Code },
             ].map((item) => (
               <button
@@ -1457,25 +1537,34 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 <div className="flex justify-between items-center mb-4">
                   <div className="flex items-center gap-4">
                     <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">
-                      {selectedConcepts.length} Concepts Selected for Comparison
+                      {selectedConcepts.length} Concepts Shortlisted
                     </div>
                     {selectedConcepts.length > 0 && (
                       <button
                         onClick={() => setSelectedConcepts([])}
                         className="font-mono text-[10px] text-red-500/50 hover:text-red-500 uppercase tracking-widest transition-colors"
                       >
-                        Clear
+                        Clear Shortlist
                       </button>
                     )}
                   </div>
-                  {selectedConcepts.length >= 2 && (
+                  <div className="flex gap-3">
+                    {selectedConcepts.length >= 2 && (
+                      <button
+                        onClick={() => setView("compare")}
+                        className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all"
+                      >
+                        Compare Side-by-Side
+                      </button>
+                    )}
                     <button
-                      onClick={() => setView("compare" as any)}
-                      className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 bg-white text-black hover:bg-zinc-200 transition-all"
+                      onClick={() => setView("shortlist")}
+                      className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 bg-white text-black hover:bg-zinc-200 transition-all flex items-center gap-2"
                     >
-                      Compare Side-by-Side
+                      <Check size={12} />
+                      View Shortlist
                     </button>
-                  )}
+                  </div>
                 </div>
                 {/* Rating Filter */}
                 <div className="flex items-center gap-4 mb-8 px-2">
@@ -1532,8 +1621,48 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 })}
               </div>
 
+              {/* Related Trends Integration */}
+              {trends && (
+                <div className="space-y-6 pt-12 border-t border-zinc-800">
+                  <div className="flex justify-between items-center">
+                    <div className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">
+                      Related Cultural Trends
+                    </div>
+                    <button 
+                      onClick={() => setView("trends")}
+                      className="font-mono text-[10px] text-white hover:underline uppercase tracking-widest"
+                    >
+                      View All Trends
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {trends.slice(0, 2).map((trend, idx) => (
+                      <div key={idx} className="bg-zinc-900/30 border border-zinc-800 p-6 space-y-4">
+                        <h4 className="font-display text-xl text-white italic">{trend.name}</h4>
+                        <p className="text-xs text-zinc-500 leading-relaxed line-clamp-2">{trend.why_it_matters}</p>
+                        <button
+                          onClick={() => {
+                            if (selectedTrends.includes(idx)) {
+                              setSelectedTrends(selectedTrends.filter(i => i !== idx));
+                            } else {
+                              setSelectedTrends([...selectedTrends, idx]);
+                            }
+                          }}
+                          className={cn(
+                            "w-full py-2 border font-mono text-[9px] uppercase tracking-widest transition-all",
+                            selectedTrends.includes(idx) ? "bg-white text-black border-white" : "border-zinc-800 text-zinc-500 hover:text-white"
+                          )}
+                        >
+                          {selectedTrends.includes(idx) ? "Shortlisted" : "Shortlist Trend"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <AnimatePresence>
-                {selectedConcepts.length >= 2 && (
+                {selectedConcepts.length >= 2 && view === "results" && (
                   <motion.div 
                     initial={{ y: 100 }}
                     animate={{ y: 0 }}
@@ -1541,22 +1670,13 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40"
                   >
                     <button
-                      onClick={() => setView("compare" as any)}
+                      onClick={() => setView("compare")}
                       className="bg-white text-black px-8 py-4 font-display italic text-xl shadow-2xl hover:scale-105 transition-all flex items-center gap-4"
                     >
                       Compare {selectedConcepts.length} Concepts
                       <ArrowRight size={20} />
                     </button>
                   </motion.div>
-                )}
-              </AnimatePresence>
-
-              <AnimatePresence>
-                {view === ("compare" as any) && (
-                  <ComparisonView 
-                    concepts={selectedConcepts.map(idx => results.concepts[idx])}
-                    onClose={() => setView("results")}
-                  />
                 )}
               </AnimatePresence>
 
@@ -1624,6 +1744,25 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       >
                         <Layout size={12} />
                         Auto Storyboard
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (selectedTrends.includes(idx)) {
+                            setSelectedTrends(selectedTrends.filter(i => i !== idx));
+                          } else {
+                            setSelectedTrends([...selectedTrends, idx]);
+                          }
+                        }}
+                        className={cn(
+                          "px-4 py-2 border font-mono text-[10px] uppercase tracking-widest transition-all flex items-center gap-2",
+                          selectedTrends.includes(idx)
+                            ? "bg-white text-black border-white"
+                            : "border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600"
+                        )}
+                      >
+                        {selectedTrends.includes(idx) ? <Check size={12} /> : <Plus size={12} />}
+                        {selectedTrends.includes(idx) ? "Shortlisted" : "Shortlist"}
                       </button>
                     </div>
                   </motion.div>
@@ -1868,6 +2007,33 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               <PromptBlock title="Analyst DNA" content={TREND_PROMPT} />
             </motion.div>
           )}
+
+          <AnimatePresence>
+            {view === "compare" && results && (
+              <ComparisonView 
+                concepts={selectedConcepts.map(idx => results.concepts[idx])}
+                onClose={() => setView("results")}
+              />
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {view === "shortlist" && (
+              <ShortlistView 
+                concepts={results?.concepts || []}
+                trends={trends || []}
+                selectedConcepts={selectedConcepts}
+                selectedTrends={selectedTrends}
+                onExport={exportShortlistToPDF}
+                onClear={() => {
+                  setSelectedConcepts([]);
+                  setSelectedTrends([]);
+                }}
+                onClose={() => setView(results ? "results" : "input")}
+                onSendToStoryboarder={sendConceptToStoryboarder}
+              />
+            )}
+          </AnimatePresence>
         </main>
       </div>
     </div>
@@ -1921,6 +2087,119 @@ function ComparisonView({ concepts, onClose }: { concepts: Concept[]; onClose: (
               </div>
             </div>
           ))}
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function ShortlistView({ 
+  concepts, 
+  trends, 
+  selectedConcepts, 
+  selectedTrends, 
+  onExport, 
+  onClear,
+  onClose,
+  onSendToStoryboarder
+}: { 
+  concepts: Concept[]; 
+  trends: Trend[]; 
+  selectedConcepts: number[]; 
+  selectedTrends: number[]; 
+  onExport: () => void; 
+  onClear: () => void;
+  onClose: () => void;
+  onSendToStoryboarder: (concept: Concept) => void;
+}) {
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl overflow-y-auto p-6 md:p-20"
+    >
+      <div className="max-w-6xl mx-auto space-y-12">
+        <div className="flex justify-between items-center border-b border-zinc-800 pb-10">
+          <div className="space-y-1">
+            <h2 className="font-display text-5xl text-white italic">Shortlist</h2>
+            <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">
+              {selectedConcepts.length} Concepts & {selectedTrends.length} Trends Saved
+            </p>
+          </div>
+          <div className="flex gap-4">
+            <button 
+              onClick={onClear}
+              className="px-6 py-4 border border-red-900/30 text-red-500/50 hover:text-red-500 hover:border-red-500 font-mono text-[10px] uppercase tracking-widest transition-all flex items-center gap-2"
+            >
+              <Trash2 size={14} />
+              Clear All
+            </button>
+            <button 
+              onClick={onExport}
+              className="px-8 py-4 bg-white text-black font-display italic text-xl hover:bg-zinc-200 transition-all flex items-center gap-4"
+            >
+              <Download size={20} />
+              Export PDF
+            </button>
+            <button 
+              onClick={onClose}
+              className="p-4 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all"
+            >
+              <X size={24} />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+          {/* Selected Trends */}
+          <div className="space-y-8">
+            <h3 className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Saved Trends</h3>
+            {selectedTrends.length === 0 ? (
+              <p className="text-zinc-700 italic font-display text-xl">No trends shortlisted yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {selectedTrends.map((idx) => {
+                  const trend = trends[idx];
+                  return (
+                    <div key={idx} className="bg-zinc-900/50 border border-zinc-800 p-8 space-y-4">
+                      <h4 className="font-display text-2xl text-white italic">{trend.name}</h4>
+                      <p className="text-sm text-zinc-400 leading-relaxed">{trend.why_it_matters}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Selected Concepts */}
+          <div className="space-y-8">
+            <h3 className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Saved Concepts</h3>
+            {selectedConcepts.length === 0 ? (
+              <p className="text-zinc-700 italic font-display text-xl">No concepts shortlisted yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {selectedConcepts.map((idx) => {
+                  const concept = concepts[idx];
+                  return (
+                    <div key={idx} className="bg-zinc-900/50 border border-zinc-800 p-8 space-y-6">
+                      <div className="space-y-2">
+                        <h4 className="font-display text-2xl text-white italic">{concept.name}</h4>
+                        <p className="text-sm text-zinc-300 leading-relaxed italic">"{concept.idea}"</p>
+                      </div>
+                      <button 
+                        onClick={() => onSendToStoryboarder(concept)}
+                        className="w-full py-3 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 font-mono text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                      >
+                        <Layout size={12} />
+                        Send to Storyboarder
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </motion.div>
