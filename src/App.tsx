@@ -89,7 +89,7 @@ For each concept provide:
 
 4. HIGGSFIELD OPTIMIZATION (MANDATORY FOR ALL CONCEPTS)
 For every concept, generate a Higgsfield-ready configuration:
-- RECOMMENDED MODEL: Choose from Sora 2, Kling 3.0, Veo 3.1, Cinema Studio, or Click-to-Ad. 
+- RECOMMENDED MODEL: Choose from Kling 3.0, Veo 3.1, Cinema Studio, or Click-to-Ad. 
   - Social/Fast -> Kling
   - Cinematic/Brand -> Cinema Studio
   - Ad Remix -> Click-to-Ad
@@ -133,7 +133,7 @@ If the user requests Surreal AI mode, focus exclusively on concepts that are vis
 - Impossible physics
 - Surreal biological mashups
 - Dream-logic environments
-- Hyper-imaginative scenarios that DEMAND AI image/video generation (Midjourney, Sora, Kling, etc.) for their visual execution.
+- Hyper-imaginative scenarios that DEMAND AI image/video generation (Midjourney, Higgsfield, Kling, etc.) for their visual execution.
 The idea must still be strategically grounded, but the execution must be "AI-native surrealism".`;
 
 const REFINE_PROMPT = `You are an elite creative strategist. You are refining an existing advertising concept based on specific user feedback. 
@@ -403,7 +403,7 @@ export default function App() {
   });
 
   const getCreditEstimate = (model: string, length: string) => {
-    const base = model === "Cinema Studio" ? 100 : model === "Sora 2" ? 80 : 50;
+    const base = model === "Cinema Studio" ? 100 : 50;
     const multiplier = length === ":60s" ? 2 : length === ":30s" ? 1 : 0.5;
     return Math.round(base * multiplier);
   };
@@ -1948,7 +1948,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     Higgsfield Model
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {["Sora 2", "Kling 3.0", "Veo 3.1", "Cinema Studio", "Click-to-Ad"].map((m) => (
+                    {["Kling 3.0", "Veo 3.1", "Cinema Studio", "Click-to-Ad"].map((m) => (
                       <button
                         key={m}
                         onClick={() => setHiggsfieldModel(m)}
