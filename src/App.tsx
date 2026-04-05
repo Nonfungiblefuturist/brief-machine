@@ -410,6 +410,15 @@ export default function App() {
   const [extractorFrames, setExtractorFrames] = useState<string[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionInterval, setExtractionInterval] = useState(1); // seconds
+  const [selectedExtractorFrames, setSelectedExtractorFrames] = useState<number[]>([]);
+  const [extractorExportFormat, setExtractorExportFormat] = useState<'jpg' | 'png'>('jpg');
+  const [extractorThumbnailSize, setExtractorThumbnailSize] = useState<'sm' | 'md' | 'lg'>('md');
+  const [extractorAspectRatio, setExtractorAspectRatio] = useState<'16:9' | '9:16'>('16:9');
+  const [hoveredFrame, setHoveredFrame] = useState<string | null>(null);
+  const [extractorBackgrounds, setExtractorBackgrounds] = useState<Record<number, string>>({});
+  const [isGeneratingExtractorBackground, setIsGeneratingExtractorBackground] = useState<number | null>(null);
+  const [refiningBackgroundIndex, setRefiningBackgroundIndex] = useState<number | null>(null);
+  const [backgroundRefinementPrompt, setBackgroundRefinementPrompt] = useState("");
   const extractorVideoRef = useRef<HTMLVideoElement>(null);
 
   const getCreditEstimate = (model: string, length: string) => {
@@ -901,15 +910,19 @@ Think D&AD. Think Cannes.`,
   };
 
   const exportExtractorFramesAsZip = async () => {
-    if (extractorFrames.length === 0) return;
+    const framesToExport = selectedExtractorFrames.length > 0 
+      ? extractorFrames.filter((_, i) => selectedExtractorFrames.includes(i))
+      : extractorFrames;
+
+    if (framesToExport.length === 0) return;
     setIsExporting(true);
     try {
       const zip = new JSZip();
       const folder = zip.folder("extracted-frames");
       
-      extractorFrames.forEach((frame, i) => {
+      framesToExport.forEach((frame, i) => {
         const base64Data = frame.split(',')[1];
-        folder?.file(`frame-${i + 1}.jpg`, base64Data, { base64: true });
+        folder?.file(`frame-${i + 1}.${extractorExportFormat}`, base64Data, { base64: true });
       });
       
       const content = await zip.generateAsync({ type: "blob" });
@@ -924,6 +937,68 @@ Think D&AD. Think Cannes.`,
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const sendFrameToEngine = (frame: string | string[]) => {
+    const frameCount = Array.isArray(frame) ? frame.length : 1;
+    setBriefInput(`Concept inspired by ${frameCount > 1 ? "these visual references" : "this visual reference"}: [Visual Reference Attached]`);
+    // In a real app we might attach the image to the state, 
+    // but for now we'll just set the view and the input.
+    setView("input");
+  };
+
+  const generateExtractorBackground = async (index: number, refinement?: string) => {
+    const frame = extractorFrames[index];
+    if (!frame) return;
+    
+    setIsGeneratingExtractorBackground(index);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const prompt = refinement 
+        ? `Refine the AI-generated background for this video frame: ${refinement}. 
+           Maintain the cinematic, high-end advertising style. 
+           Reference the original frame for composition and color palette.`
+        : `Generate an atmospheric, cinematic background for this video frame. 
+           Style: High-end advertising, abstract but evocative. 
+           Focus on enhancing the mood and environment while keeping the original frame's essence.`;
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash-image',
+        contents: {
+          parts: [
+            { inlineData: { data: frame.split(',')[1], mimeType: "image/jpeg" } },
+            { text: prompt }
+          ]
+        },
+        config: {
+          imageConfig: { aspectRatio: extractorAspectRatio }
+        }
+      });
+
+      let imageUrl = "";
+      for (const part of response.candidates[0].content.parts) {
+        if (part.inlineData) {
+          imageUrl = `data:image/png;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+
+      if (imageUrl) {
+        setExtractorBackgrounds(prev => ({ ...prev, [index]: imageUrl }));
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Background generation failed.");
+    } finally {
+      setIsGeneratingExtractorBackground(null);
+      setRefiningBackgroundIndex(null);
+      setBackgroundRefinementPrompt("");
+    }
+  };
+
+  const sendFrameToStoryboarder = (frame: string) => {
+    setStoryboarderImages(prev => [...prev, frame]);
+    setView("storyboarder");
   };
 
   const exportStoryboardVideo = async () => {
@@ -3015,24 +3090,54 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         </div>
                         
                         <div className="p-6 bg-zinc-900/30 border border-zinc-800 space-y-6">
-                          <div className="flex justify-between items-center">
-                            <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Extraction Interval</label>
-                            <div className="flex items-center gap-4">
+                          <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                              <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Extraction Interval</label>
                               <span className="font-display text-xl text-white italic">{extractionInterval}s</span>
-                              <div className="flex gap-1">
-                                {[1, 2, 5, 10].map(val => (
+                            </div>
+                            <input 
+                              type="range" 
+                              min="0.5" 
+                              max="30" 
+                              step="0.5" 
+                              value={extractionInterval} 
+                              onChange={(e) => setExtractionInterval(parseFloat(e.target.value))}
+                              className="w-full accent-white h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer"
+                            />
+                            <div className="flex justify-between font-mono text-[8px] text-zinc-700 uppercase tracking-widest">
+                              <span>0.5s</span>
+                              <span>30s</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <label className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Target Aspect Ratio</label>
+                              <div className="flex border border-zinc-800 p-1">
+                                {["16:9", "9:16"].map(ratio => (
                                   <button
-                                    key={val}
-                                    onClick={() => setExtractionInterval(val)}
+                                    key={ratio}
+                                    onClick={() => setExtractorAspectRatio(ratio as any)}
                                     className={cn(
-                                      "w-8 h-8 font-mono text-[10px] border transition-all flex items-center justify-center",
-                                      extractionInterval === val ? "bg-white text-black border-white" : "text-zinc-500 border-zinc-800 hover:border-zinc-600"
+                                      "flex-1 py-2 font-mono text-[10px] transition-all",
+                                      extractorAspectRatio === ratio ? "bg-white text-black" : "text-zinc-500 hover:text-white"
                                     )}
                                   >
-                                    {val}
+                                    {ratio}
                                   </button>
                                 ))}
                               </div>
+                            </div>
+                            <div className="space-y-2">
+                              <label className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Export Format</label>
+                              <select 
+                                value={extractorExportFormat}
+                                onChange={(e) => setExtractorExportFormat(e.target.value as any)}
+                                className="w-full bg-black border border-zinc-800 text-zinc-500 font-mono text-[10px] p-2 focus:outline-none focus:border-zinc-600"
+                              >
+                                <option value="jpg">JPG</option>
+                                <option value="png">PNG</option>
+                              </select>
                             </div>
                           </div>
 
@@ -3068,21 +3173,89 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       </div>
 
                       <div className="space-y-6">
-                        <div className="flex justify-between items-center">
-                          <h3 className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Extracted Frames ({extractorFrames.length})</h3>
-                          {extractorFrames.length > 0 && (
-                            <button
-                              onClick={exportExtractorFramesAsZip}
-                              disabled={isExporting}
-                              className="px-6 py-3 bg-cyan-600 text-white font-display italic text-lg hover:bg-cyan-500 transition-all flex items-center gap-3 shadow-lg shadow-cyan-900/20"
-                            >
-                              {isExporting ? <RefreshCcw size={16} className="animate-spin" /> : <Download size={16} />}
-                              Export ZIP
-                            </button>
-                          )}
+                        <div className="flex flex-col gap-4">
+                          <div className="flex justify-between items-center">
+                            <h3 className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Extracted Frames ({extractorFrames.length})</h3>
+                            <div className="flex items-center gap-4">
+                              <div className="flex border border-zinc-800 p-0.5">
+                                {["sm", "md", "lg"].map(size => (
+                                  <button
+                                    key={size}
+                                    onClick={() => setExtractorThumbnailSize(size as any)}
+                                    className={cn(
+                                      "px-3 py-1 font-mono text-[8px] uppercase transition-all",
+                                      extractorThumbnailSize === size ? "bg-zinc-700 text-white" : "text-zinc-600 hover:text-zinc-400"
+                                    )}
+                                  >
+                                    {size}
+                                  </button>
+                                ))}
+                              </div>
+                              {extractorFrames.length > 0 && (
+                                <button
+                                  onClick={exportExtractorFramesAsZip}
+                                  disabled={isExporting}
+                                  className="px-6 py-3 bg-cyan-600 text-white font-display italic text-lg hover:bg-cyan-500 transition-all flex items-center gap-3 shadow-lg shadow-cyan-900/20"
+                                >
+                                  {isExporting ? <RefreshCcw size={16} className="animate-spin" /> : <Download size={16} />}
+                                  Export {selectedExtractorFrames.length > 0 ? `(${selectedExtractorFrames.length})` : "All"}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex justify-between items-center border-y border-zinc-800 py-3">
+                            <div className="flex gap-4 items-center">
+                              <div className="flex gap-2">
+                                <button 
+                                  onClick={() => setSelectedExtractorFrames(extractorFrames.map((_, i) => i))}
+                                  className="font-mono text-[8px] text-zinc-500 hover:text-white uppercase tracking-widest"
+                                >
+                                  Select All
+                                </button>
+                                <span className="text-zinc-800">/</span>
+                                <button 
+                                  onClick={() => setSelectedExtractorFrames([])}
+                                  className="font-mono text-[8px] text-zinc-500 hover:text-white uppercase tracking-widest"
+                                >
+                                  Deselect All
+                                </button>
+                              </div>
+                              {selectedExtractorFrames.length > 0 && (
+                                <button
+                                  onClick={() => sendFrameToEngine(extractorFrames.filter((_, i) => selectedExtractorFrames.includes(i)))}
+                                  className="px-3 py-1 bg-white text-black font-mono text-[8px] uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center gap-2"
+                                >
+                                  <Zap size={10} />
+                                  Batch Send to Engine
+                                </button>
+                              )}
+                            </div>
+                            {extractorFrames.length > 0 && (
+                              <button
+                                onClick={() => {
+                                  if (selectedExtractorFrames.length > 0) {
+                                    setExtractorFrames(prev => prev.filter((_, i) => !selectedExtractorFrames.includes(i)));
+                                    setSelectedExtractorFrames([]);
+                                  } else {
+                                    setExtractorFrames([]);
+                                  }
+                                }}
+                                className="font-mono text-[8px] text-red-900 hover:text-red-500 uppercase tracking-widest flex items-center gap-1"
+                              >
+                                <Trash2 size={10} />
+                                {selectedExtractorFrames.length > 0 ? "Delete Selected" : "Clear All"}
+                              </button>
+                            )}
+                          </div>
                         </div>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto p-2 border border-zinc-800 bg-black/30">
+                        <div className={cn(
+                          "grid gap-4 max-h-[600px] overflow-y-auto p-2 border border-zinc-800 bg-black/30",
+                          extractorThumbnailSize === "sm" ? "grid-cols-4 sm:grid-cols-6" : 
+                          extractorThumbnailSize === "md" ? "grid-cols-2 sm:grid-cols-3" : 
+                          "grid-cols-1 sm:grid-cols-2"
+                        )}>
                           {extractorFrames.length === 0 ? (
                             <div className="col-span-full py-20 flex flex-col items-center justify-center text-zinc-800 gap-4">
                               <FileImage size={48} />
@@ -3094,15 +3267,93 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                 key={i}
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                className="relative aspect-video bg-zinc-900 border border-zinc-800 group"
+                                onMouseEnter={() => setHoveredFrame(frame)}
+                                onMouseLeave={() => setHoveredFrame(null)}
+                                className={cn(
+                                  "relative aspect-video bg-zinc-900 border transition-all cursor-pointer group",
+                                  selectedExtractorFrames.includes(i) ? "border-cyan-500 ring-1 ring-cyan-500" : "border-zinc-800 hover:border-zinc-600"
+                                )}
+                                onClick={() => {
+                                  setSelectedExtractorFrames(prev => 
+                                    prev.includes(i) ? prev.filter(id => id !== i) : [...prev, i]
+                                  );
+                                }}
                               >
                                 <img src={frame} className="w-full h-full object-cover" />
-                                <button
-                                  onClick={() => setExtractorFrames(prev => prev.filter((_, idx) => idx !== i))}
-                                  className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                                >
-                                  <X size={10} />
-                                </button>
+                                
+                                {extractorBackgrounds[i] && (
+                                  <div className="absolute inset-0 z-10">
+                                    <img src={extractorBackgrounds[i]} className="w-full h-full object-cover opacity-50 mix-blend-overlay" />
+                                  </div>
+                                )}
+
+                                {/* Selection Checkbox */}
+                                <div className={cn(
+                                  "absolute top-2 left-2 w-4 h-4 border flex items-center justify-center transition-all",
+                                  selectedExtractorFrames.includes(i) ? "bg-cyan-500 border-cyan-500" : "bg-black/50 border-zinc-700 opacity-0 group-hover:opacity-100"
+                                )}>
+                                  {selectedExtractorFrames.includes(i) && <Check size={10} className="text-white" />}
+                                </div>
+
+                                <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-4">
+                                  <div className="flex gap-2 w-full">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (extractorBackgrounds[i]) {
+                                          setRefiningBackgroundIndex(i);
+                                          setBackgroundRefinementPrompt("");
+                                        } else {
+                                          generateExtractorBackground(i);
+                                        }
+                                      }}
+                                      disabled={isGeneratingExtractorBackground === i}
+                                      className="flex-1 py-1.5 bg-cyan-600 text-white font-mono text-[8px] uppercase tracking-widest hover:bg-cyan-500 transition-all flex items-center justify-center gap-1 disabled:opacity-50"
+                                    >
+                                      {isGeneratingExtractorBackground === i ? (
+                                        <RefreshCcw size={10} className="animate-spin" />
+                                      ) : (
+                                        <>
+                                          <Sparkles size={10} />
+                                          {extractorBackgrounds[i] ? "Refine BG" : "AI BG"}
+                                        </>
+                                      )}
+                                    </button>
+                                  </div>
+                                  <div className="flex gap-2 w-full">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        sendFrameToEngine(frame);
+                                      }}
+                                      className="flex-1 py-1.5 bg-white text-black font-mono text-[8px] uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center justify-center gap-1"
+                                    >
+                                      <Zap size={10} />
+                                      Engine
+                                    </button>
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        sendFrameToStoryboarder(frame);
+                                      }}
+                                      className="flex-1 py-1.5 border border-white text-white font-mono text-[8px] uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center justify-center gap-1"
+                                    >
+                                      <Layout size={10} />
+                                      Story
+                                    </button>
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setExtractorFrames(prev => prev.filter((_, idx) => idx !== i));
+                                      setSelectedExtractorFrames(prev => prev.filter(id => id !== i));
+                                    }}
+                                    className="w-full py-1.5 border border-red-500 text-red-500 font-mono text-[8px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2"
+                                  >
+                                    <Trash2 size={10} />
+                                    Delete
+                                  </button>
+                                </div>
                                 <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/80 font-mono text-[8px] text-white border border-zinc-800">
                                   FRAME {i + 1}
                                 </div>
@@ -3115,6 +3366,97 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   )}
                 </div>
               </div>
+
+              {/* Hover Preview Overlay */}
+              <AnimatePresence>
+                {hoveredFrame && (
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    className="fixed bottom-10 right-10 w-96 aspect-video z-50 pointer-events-none border-4 border-zinc-800 shadow-2xl overflow-hidden bg-black"
+                  >
+                    <img src={hoveredFrame} className="w-full h-full object-contain" />
+                    {extractorBackgrounds[extractorFrames.indexOf(hoveredFrame)] && (
+                      <div className="absolute inset-0">
+                        <img src={extractorBackgrounds[extractorFrames.indexOf(hoveredFrame)]} className="w-full h-full object-cover opacity-50 mix-blend-overlay" />
+                      </div>
+                    )}
+                    <div className="absolute top-0 left-0 w-full p-2 bg-gradient-to-b from-black/80 to-transparent">
+                      <p className="font-mono text-[10px] text-white uppercase tracking-widest">Preview Mode</p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Background Refinement Modal */}
+              <AnimatePresence>
+                {refiningBackgroundIndex !== null && (
+                  <div className="fixed inset-0 bg-black/90 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+                    <motion.div 
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 20 }}
+                      className="bg-zinc-900 border border-zinc-800 p-8 max-w-2xl w-full space-y-6"
+                    >
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-display text-2xl text-white italic">Refine AI Background</h3>
+                        <button onClick={() => setRefiningBackgroundIndex(null)} className="text-zinc-500 hover:text-white">
+                          <X size={20} />
+                        </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <p className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Original Frame</p>
+                          <div className="aspect-video bg-black border border-zinc-800 overflow-hidden">
+                            <img src={extractorFrames[refiningBackgroundIndex]} className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <p className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Current Background</p>
+                          <div className="aspect-video bg-black border border-zinc-800 overflow-hidden">
+                            <img src={extractorBackgrounds[refiningBackgroundIndex]} className="w-full h-full object-cover" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-4">
+                        <label className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Refinement Instructions</label>
+                        <textarea
+                          value={backgroundRefinementPrompt}
+                          onChange={(e) => setBackgroundRefinementPrompt(e.target.value)}
+                          placeholder="e.g., Make it more neon-lit, add a futuristic cityscape, or change the color palette to deep purples..."
+                          className="w-full bg-black border border-zinc-800 p-4 text-white font-mono text-xs focus:outline-none focus:border-cyan-500 h-32 resize-none"
+                        />
+                      </div>
+
+                      <div className="flex gap-4">
+                        <button
+                          onClick={() => setRefiningBackgroundIndex(null)}
+                          className="flex-1 py-4 border border-zinc-800 text-zinc-500 hover:text-white font-mono text-[10px] uppercase tracking-widest transition-all"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => generateExtractorBackground(refiningBackgroundIndex, backgroundRefinementPrompt)}
+                          disabled={isGeneratingExtractorBackground !== null}
+                          className="flex-1 py-4 bg-white text-black font-display italic text-xl hover:bg-zinc-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                        >
+                          {isGeneratingExtractorBackground !== null ? (
+                            <RefreshCcw size={20} className="animate-spin" />
+                          ) : (
+                            <>
+                              <Sparkles size={20} />
+                              Regenerate Background
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </motion.div>
+                  </div>
+                )}
+              </AnimatePresence>
             </motion.div>
           )}
 
