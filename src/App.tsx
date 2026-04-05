@@ -564,7 +564,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "briefMachineLab" | "promptEngine">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
@@ -621,13 +621,13 @@ export default function App() {
     motion: ""
   });
   const [briefMachineRawInput, setBriefMachineRawInput] = useState("");
-  const [briefMachineCharacters, setBriefMachineCharacters] = useState<BriefMachineCharacter[]>([]);
+  const [anomaLabCharacters, setBriefMachineCharacters] = useState<BriefMachineCharacter[]>([]);
   const [briefMachineHistory, setBriefMachineHistory] = useState<BriefMachineHistoryItem[]>([]);
   const [briefMachineStoryboard, setBriefMachineStoryboard] = useState<BriefMachineShot[]>([]);
   const [isStoryboardMode, setIsStoryboardMode] = useState(false);
-  const [isBriefMachineSidebarOpen, setIsBriefMachineSidebarOpen] = useState(true);
+  const [isAnomaLabSidebarOpen, setIsBriefMachineSidebarOpen] = useState(true);
   const [isBriefMachineRightPanelOpen, setIsBriefMachineRightPanelOpen] = useState(true);
-  const [briefMachineActiveTab, setBriefMachineActiveTab] = useState<"presets" | "characters" | "history">("presets");
+  const [anomaLabActiveTab, setAnomaLabActiveTab] = useState<"presets" | "characters" | "history">("presets");
   const [isBeautifying, setIsBeautifying] = useState(false);
   const [isSmartEditing, setIsSmartEditing] = useState(false);
   const [smartEditInstruction, setSmartEditInstruction] = useState("");
@@ -636,8 +636,8 @@ export default function App() {
   const [expandedLabSections, setExpandedLabSections] = useState<string[]>(["studio"]);
   const [expandedPresetCategories, setExpandedPresetCategories] = useState<string[]>([]);
   const [hoveredStoryboardFrame, setHoveredStoryboardFrame] = useState<number | null>(null);
-  const [briefMachineGallery, setBriefMachineGallery] = useState<string[]>([]);
-  const [briefMachineTheme, setBriefMachineTheme] = useState<"dark" | "light" | "high-contrast">("dark");
+  const [anomaLabGallery, setAnomaLabGallery] = useState<string[]>([]);
+  const [anomaLabTheme, setAnomaLabTheme] = useState<"dark" | "light" | "high-contrast">("dark");
   const [favoritePresets, setFavoritePresets] = useState<string[]>([]);
   const [galleryGridCols, setGalleryGridCols] = useState<1 | 2 | 4>(2);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -938,7 +938,7 @@ export default function App() {
     };
     const updatedHistory = [newItem, ...briefMachineHistory].slice(0, 50);
     setBriefMachineHistory(updatedHistory);
-    localStorage.setItem("briefMachineLab_history", JSON.stringify(updatedHistory));
+    localStorage.setItem("anomaLab_history", JSON.stringify(updatedHistory));
   };
 
   const copyFullPrompt = () => {
@@ -964,22 +964,22 @@ export default function App() {
   const addCharacter = (char: Omit<BriefMachineCharacter, "id" | "initials" | "color">) => {
     const initials = char.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
     const colors = ["#c87941", "#41c879", "#4179c8", "#c84179", "#7941c8"];
-    const color = colors[briefMachineCharacters.length % colors.length];
+    const color = colors[anomaLabCharacters.length % colors.length];
     const newChar: BriefMachineCharacter = {
       ...char,
       id: Date.now().toString(),
       initials,
       color
     };
-    const updated = [...briefMachineCharacters, newChar];
+    const updated = [...anomaLabCharacters, newChar];
     setBriefMachineCharacters(updated);
-    localStorage.setItem("briefMachineLab_characters", JSON.stringify(updated));
+    localStorage.setItem("anomaLab_characters", JSON.stringify(updated));
   };
 
   const deleteCharacter = (id: string) => {
-    const updated = briefMachineCharacters.filter(c => c.id !== id);
+    const updated = anomaLabCharacters.filter(c => c.id !== id);
     setBriefMachineCharacters(updated);
-    localStorage.setItem("briefMachineLab_characters", JSON.stringify(updated));
+    localStorage.setItem("anomaLab_characters", JSON.stringify(updated));
   };
 
   const insertCharacter = (char: BriefMachineCharacter) => {
@@ -990,19 +990,19 @@ export default function App() {
   };
 
   useEffect(() => {
-    const savedHistory = localStorage.getItem("briefMachineLab_history");
+    const savedHistory = localStorage.getItem("anomaLab_history");
     if (savedHistory) setBriefMachineHistory(JSON.parse(savedHistory));
     
-    const savedChars = localStorage.getItem("briefMachineLab_characters");
+    const savedChars = localStorage.getItem("anomaLab_characters");
     if (savedChars) setBriefMachineCharacters(JSON.parse(savedChars));
 
     const savedBriefs = localStorage.getItem("brief_history");
     if (savedBriefs) setBriefHistory(JSON.parse(savedBriefs));
 
-    const firstVisit = !localStorage.getItem("briefMachineLab_visited");
+    const firstVisit = !localStorage.getItem("anomaLab_visited");
     if (firstVisit) {
       setShowWelcomeModal(true);
-      localStorage.setItem("briefMachineLab_visited", "true");
+      localStorage.setItem("anomaLab_visited", "true");
     }
   }, []);
 
@@ -1027,7 +1027,7 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (view !== "briefMachineLab") return;
+      if (view !== "anomaLab") return;
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         copyFullPrompt();
       }
@@ -1049,7 +1049,7 @@ export default function App() {
     const data = {
       history: briefMachineHistory,
       storyboard: briefMachineStoryboard,
-      characters: briefMachineCharacters
+      characters: anomaLabCharacters
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -1087,7 +1087,7 @@ export default function App() {
     
     setIsSaving(true);
     const projectName = type === 'storyboard' ? storyboarderProjectName : 
-                        type === 'prompt' ? `Brief Machine Lab ${new Date().toLocaleDateString()}` :
+                        type === 'prompt' ? `Anoma Lab ${new Date().toLocaleDateString()}` :
                         `Extractor ${new Date().toLocaleDateString()}`;
     
     const projectId = projectName.replace(/\s+/g, '-').toLowerCase() + '-' + Date.now();
@@ -1127,7 +1127,7 @@ export default function App() {
       setView("storyboarder");
     } else if (project.prompts && project.prompts.length > 0) {
       setBriefMachineHistory(project.prompts);
-      setView("briefMachineLab");
+      setView("anomaLab");
     } else if (project.extractedFrames && project.extractedFrames.length > 0) {
       setExtractorFrames(project.extractedFrames);
       setView("extractor");
@@ -2629,11 +2629,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 id: "engine_group", 
                 label: "Engine", 
                 icon: Zap, 
-                active: view === "input" || view === "results" || view === "prompt" || view === "briefMachineLab" || view === "promptEngine",
+                active: view === "input" || view === "results" || view === "prompt" || view === "anomaLab" || view === "promptEngine",
                 subItems: [
                   { id: "input", label: "Concepts" },
                   { id: "prompt", label: "DNA" },
-                  { id: "briefMachineLab", label: "Brief Machine Lab" },
+                  { id: "anomaLab", label: "Anoma Lab" },
                   { id: "promptEngine", label: "Prompt Engine" }
                 ]
               },
@@ -3497,28 +3497,28 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
           </AnimatePresence>
 
           {/* BRIEF MACHINE LAB VIEW */}
-          {view === "briefMachineLab" && (
+          {view === "anomaLab" && (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               className={cn(
                 "flex overflow-hidden font-sans min-h-[calc(100vh-200px)] border transition-all duration-500",
-                briefMachineTheme === "dark" ? "bg-black text-[#e0e0e0] border-zinc-800" : 
-                briefMachineTheme === "light" ? "bg-zinc-50 text-zinc-900 border-zinc-200" : 
+                anomaLabTheme === "dark" ? "bg-black text-[#e0e0e0] border-zinc-800" : 
+                anomaLabTheme === "light" ? "bg-zinc-50 text-zinc-900 border-zinc-200" : 
                 "bg-black text-yellow-400 border-yellow-400"
               )}
             >
               {/* Left Sidebar */}
               <AnimatePresence>
-                {isBriefMachineSidebarOpen && (
+                {isAnomaLabSidebarOpen && (
                   <motion.div 
                     initial={{ x: -300 }}
                     animate={{ x: 0 }}
                     exit={{ x: -300 }}
                     className={cn(
                       "w-[300px] border-r flex flex-col transition-colors duration-500",
-                      briefMachineTheme === "dark" ? "bg-black border-zinc-800" : 
-                      briefMachineTheme === "light" ? "bg-white border-zinc-200" : 
+                      anomaLabTheme === "dark" ? "bg-black border-zinc-800" : 
+                      anomaLabTheme === "light" ? "bg-white border-zinc-200" : 
                       "bg-black border-yellow-400"
                     )}
                   >
@@ -3526,8 +3526,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       {/* THEME SWITCHER */}
                       <div className={cn(
                         "p-4 border-b flex items-center justify-between",
-                        briefMachineTheme === "dark" ? "border-zinc-900" : 
-                        briefMachineTheme === "light" ? "border-zinc-100" : 
+                        anomaLabTheme === "dark" ? "border-zinc-900" : 
+                        anomaLabTheme === "light" ? "border-zinc-100" : 
                         "border-yellow-900"
                       )}>
                         <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">Theme</span>
@@ -3535,10 +3535,10 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           {(["dark", "light", "high-contrast"] as const).map(t => (
                             <button 
                               key={t}
-                              onClick={() => setBriefMachineTheme(t)}
+                              onClick={() => setAnomaLabTheme(t)}
                               className={cn(
                                 "w-6 h-6 rounded flex items-center justify-center border transition-all",
-                                briefMachineTheme === t ? "border-[#c87941] bg-[#c87941]/10" : "border-zinc-800 hover:border-zinc-600"
+                                anomaLabTheme === t ? "border-[#c87941] bg-[#c87941]/10" : "border-zinc-800 hover:border-zinc-600"
                               )}
                               title={t.charAt(0).toUpperCase() + t.slice(1)}
                             >
@@ -3594,7 +3594,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                 </div>
                                 
                                 <div className="space-y-4">
-                                  {briefMachineCharacters.map(char => (
+                                  {anomaLabCharacters.map(char => (
                                     <div key={char.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-lg space-y-3 group hover:border-zinc-700 transition-all">
                                       <div className="flex items-center gap-3">
                                         <div 
@@ -3608,18 +3608,18 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                             type="text"
                                             value={char.name}
                                             onChange={(e) => {
-                                              const updated = briefMachineCharacters.map(c => c.id === char.id ? { ...c, name: e.target.value } : c);
+                                              const updated = anomaLabCharacters.map(c => c.id === char.id ? { ...c, name: e.target.value } : c);
                                               setBriefMachineCharacters(updated);
-                                              localStorage.setItem("briefMachineLab_characters", JSON.stringify(updated));
+                                              localStorage.setItem("anomaLab_characters", JSON.stringify(updated));
                                             }}
                                             className="bg-transparent border-none p-0 text-xs font-bold text-white focus:ring-0 w-full"
                                           />
                                           <textarea 
                                             value={char.description}
                                             onChange={(e) => {
-                                              const updated = briefMachineCharacters.map(c => c.id === char.id ? { ...c, name: e.target.value } : c);
+                                              const updated = anomaLabCharacters.map(c => c.id === char.id ? { ...c, name: e.target.value } : c);
                                               setBriefMachineCharacters(updated);
-                                              localStorage.setItem("briefMachineLab_characters", JSON.stringify(updated));
+                                              localStorage.setItem("anomaLab_characters", JSON.stringify(updated));
                                             }}
                                             placeholder="Role/Description..."
                                             className="bg-transparent border-none p-0 text-[10px] text-zinc-500 focus:ring-0 w-full resize-none h-4"
@@ -3644,13 +3644,13 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                             const desc = prompt("Update description?", char.description);
                                             const wardrobe = prompt("Update wardrobe?", char.wardrobe);
                                             if (desc !== null || wardrobe !== null) {
-                                              const updated = briefMachineCharacters.map(c => c.id === char.id ? { 
+                                              const updated = anomaLabCharacters.map(c => c.id === char.id ? { 
                                                 ...c, 
                                                 description: desc ?? c.description,
                                                 wardrobe: wardrobe ?? c.wardrobe
                                               } : c);
                                               setBriefMachineCharacters(updated);
-                                              localStorage.setItem("briefMachineLab_characters", JSON.stringify(updated));
+                                              localStorage.setItem("anomaLab_characters", JSON.stringify(updated));
                                             }
                                           }}
                                           className="py-2 bg-zinc-900 text-zinc-500 font-mono text-[9px] uppercase tracking-widest hover:text-white transition-all border border-zinc-800"
@@ -3670,8 +3670,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       {/* PRESETS SECTION */}
                       <div className={cn(
                         "border-b",
-                        briefMachineTheme === "dark" ? "border-zinc-900" : 
-                        briefMachineTheme === "light" ? "border-zinc-100" : 
+                        anomaLabTheme === "dark" ? "border-zinc-900" : 
+                        anomaLabTheme === "light" ? "border-zinc-100" : 
                         "border-yellow-900"
                       )}>
                         <button 
@@ -3693,8 +3693,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                               exit={{ height: 0, opacity: 0 }}
                               className={cn(
                                 "overflow-hidden",
-                                briefMachineTheme === "dark" ? "bg-zinc-950/30" : 
-                                briefMachineTheme === "light" ? "bg-zinc-50" : 
+                                anomaLabTheme === "dark" ? "bg-zinc-950/30" : 
+                                anomaLabTheme === "light" ? "bg-zinc-50" : 
                                 "bg-black"
                               )}
                             >
@@ -3718,8 +3718,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                             }}
                                             className={cn(
                                               "flex-1 text-left py-2 px-3 text-[11px] transition-all rounded border border-transparent",
-                                              briefMachineTheme === "dark" ? "text-zinc-400 hover:bg-zinc-900 hover:text-white hover:border-zinc-800" : 
-                                              briefMachineTheme === "light" ? "text-zinc-600 hover:bg-zinc-100 hover:text-black hover:border-zinc-200" : 
+                                              anomaLabTheme === "dark" ? "text-zinc-400 hover:bg-zinc-900 hover:text-white hover:border-zinc-800" : 
+                                              anomaLabTheme === "light" ? "text-zinc-600 hover:bg-zinc-100 hover:text-black hover:border-zinc-200" : 
                                               "text-yellow-600 hover:bg-zinc-900 hover:text-yellow-400 hover:border-yellow-400"
                                             )}
                                           >
@@ -3750,16 +3750,16 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                 {Object.entries(BRIEF_MACHINE_PRESETS).map(([category, items]) => (
                                   <div key={category} className={cn(
                                     "border rounded overflow-hidden",
-                                    briefMachineTheme === "dark" ? "border-zinc-900" : 
-                                    briefMachineTheme === "light" ? "border-zinc-200" : 
+                                    anomaLabTheme === "dark" ? "border-zinc-900" : 
+                                    anomaLabTheme === "light" ? "border-zinc-200" : 
                                     "border-yellow-900"
                                   )}>
                                     <button 
                                       onClick={() => setExpandedPresetCategories(prev => prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category])}
                                       className={cn(
                                         "w-full flex items-center justify-between p-2 transition-all",
-                                        briefMachineTheme === "dark" ? "bg-zinc-900/50 hover:bg-zinc-900" : 
-                                        briefMachineTheme === "light" ? "bg-zinc-100 hover:bg-zinc-200" : 
+                                        anomaLabTheme === "dark" ? "bg-zinc-900/50 hover:bg-zinc-900" : 
+                                        anomaLabTheme === "light" ? "bg-zinc-100 hover:bg-zinc-200" : 
                                         "bg-zinc-900 hover:bg-zinc-800"
                                       )}
                                     >
@@ -3796,8 +3796,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                                   }}
                                                   className={cn(
                                                     "flex-1 text-left py-2 px-3 text-[11px] transition-all rounded border border-transparent",
-                                                    briefMachineTheme === "dark" ? "text-zinc-500 hover:bg-zinc-900 hover:text-white hover:border-zinc-800" : 
-                                                    briefMachineTheme === "light" ? "text-zinc-600 hover:bg-zinc-100 hover:text-black hover:border-zinc-200" : 
+                                                    anomaLabTheme === "dark" ? "text-zinc-500 hover:bg-zinc-900 hover:text-white hover:border-zinc-800" : 
+                                                    anomaLabTheme === "light" ? "text-zinc-600 hover:bg-zinc-100 hover:text-black hover:border-zinc-200" : 
                                                     "text-yellow-600 hover:bg-zinc-900 hover:text-yellow-400 hover:border-yellow-400"
                                                   )}
                                                 >
@@ -3864,7 +3864,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                   onDelete={(id) => {
                                     const updated = briefMachineHistory.filter(h => h.id !== id);
                                     setBriefMachineHistory(updated);
-                                    localStorage.setItem("briefMachineLab_history", JSON.stringify(updated));
+                                    localStorage.setItem("anomaLab_history", JSON.stringify(updated));
                                   }}
                                 />
                               </div>
@@ -3879,32 +3879,32 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
 
               {/* Toggle Sidebar */}
               <button 
-                onClick={() => setIsBriefMachineSidebarOpen(!isBriefMachineSidebarOpen)}
+                onClick={() => setIsBriefMachineSidebarOpen(!isAnomaLabSidebarOpen)}
                 className="absolute left-0 top-1/2 -translate-y-1/2 z-50 bg-zinc-900 border border-zinc-800 p-1 text-zinc-500 hover:text-white transition-all"
-                style={{ left: isBriefMachineSidebarOpen ? "300px" : "0" }}
+                style={{ left: isAnomaLabSidebarOpen ? "300px" : "0" }}
               >
-                {isBriefMachineSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+                {isAnomaLabSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
               </button>
 
               {/* Main Area */}
               <div className={cn(
                 "flex-1 flex flex-col overflow-hidden transition-colors duration-500",
-                briefMachineTheme === "dark" ? "bg-black" : 
-                briefMachineTheme === "light" ? "bg-white" : 
+                anomaLabTheme === "dark" ? "bg-black" : 
+                anomaLabTheme === "light" ? "bg-white" : 
                 "bg-black"
               )}>
                 {/* Toolbar */}
                 <div className={cn(
                   "h-[60px] border-b flex items-center justify-between px-6 backdrop-blur-md z-30 transition-colors duration-500",
-                  briefMachineTheme === "dark" ? "border-zinc-800 bg-black/80" : 
-                  briefMachineTheme === "light" ? "border-zinc-200 bg-white/80" : 
+                  anomaLabTheme === "dark" ? "border-zinc-800 bg-black/80" : 
+                  anomaLabTheme === "light" ? "border-zinc-200 bg-white/80" : 
                   "border-yellow-400 bg-black/80"
                 )}>
                   <div className="flex items-center gap-4">
                     <div className={cn(
                       "h-4 w-[1px]",
-                      briefMachineTheme === "dark" ? "bg-zinc-800" : 
-                      briefMachineTheme === "light" ? "bg-zinc-200" : 
+                      anomaLabTheme === "dark" ? "bg-zinc-800" : 
+                      anomaLabTheme === "light" ? "bg-zinc-200" : 
                       "bg-yellow-400"
                     )} />
                     <div className="flex items-center gap-2">
@@ -3913,12 +3913,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         disabled={isBeautifying}
                         className={cn(
                           "flex items-center gap-2 px-3 py-1.5 border transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50",
-                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
-                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          anomaLabTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          anomaLabTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
                           "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
                         )}
                       >
-                        {isBeautifying ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-[#c87941]"} />}
+                        {isBeautifying ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} className={anomaLabTheme === "high-contrast" ? "text-yellow-400" : "text-[#c87941]"} />}
                         Beautify
                       </button>
                       <button 
@@ -3929,12 +3929,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         disabled={isSmartEditing}
                         className={cn(
                           "flex items-center gap-2 px-3 py-1.5 border transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50",
-                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
-                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          anomaLabTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          anomaLabTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
                           "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
                         )}
                       >
-                        {isSmartEditing ? <RefreshCcw size={12} className="animate-spin" /> : <Code size={12} className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-cyan-500"} />}
+                        {isSmartEditing ? <RefreshCcw size={12} className="animate-spin" /> : <Code size={12} className={anomaLabTheme === "high-contrast" ? "text-yellow-400" : "text-cyan-500"} />}
                         Smart Edit
                       </button>
                       <button 
@@ -3942,12 +3942,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         disabled={isExpanding}
                         className={cn(
                           "flex items-center gap-2 px-3 py-1.5 border transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50",
-                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
-                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          anomaLabTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          anomaLabTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
                           "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
                         )}
                       >
-                        {isExpanding ? <RefreshCcw size={12} className="animate-spin" /> : <Maximize2 size={12} className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-purple-500"} />}
+                        {isExpanding ? <RefreshCcw size={12} className="animate-spin" /> : <Maximize2 size={12} className={anomaLabTheme === "high-contrast" ? "text-yellow-400" : "text-purple-500"} />}
                         Expand
                       </button>
                       <button 
@@ -3955,24 +3955,24 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         disabled={isSimplifying}
                         className={cn(
                           "flex items-center gap-2 px-3 py-1.5 border transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50",
-                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
-                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          anomaLabTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          anomaLabTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
                           "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
                         )}
                       >
-                        {isSimplifying ? <RefreshCcw size={12} className="animate-spin" /> : <Minus size={12} className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-zinc-500"} />}
+                        {isSimplifying ? <RefreshCcw size={12} className="animate-spin" /> : <Minus size={12} className={anomaLabTheme === "high-contrast" ? "text-yellow-400" : "text-zinc-500"} />}
                         Simplify
                       </button>
                       <button 
                         onClick={rollPrompt}
                         className={cn(
                           "flex items-center gap-2 px-3 py-1.5 border transition-all rounded font-mono text-[10px] uppercase tracking-widest",
-                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
-                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          anomaLabTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          anomaLabTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
                           "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
                         )}
                       >
-                        <RefreshCcw size={12} className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-orange-500"} />
+                        <RefreshCcw size={12} className={anomaLabTheme === "high-contrast" ? "text-yellow-400" : "text-orange-500"} />
                         Roll
                       </button>
                     </div>
@@ -3985,20 +3985,20 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         disabled={isSaving}
                         className={cn(
                           "flex items-center gap-2 px-4 py-2 border transition-all rounded font-mono text-[10px] uppercase tracking-widest",
-                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
-                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          anomaLabTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          anomaLabTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
                           "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
                         )}
                       >
                         {isSaving ? <RefreshCcw size={14} className="animate-spin" /> : <Save size={14} />}
-                        Save Brief Machine Lab
+                        Save Anoma Lab
                       </button>
                     )}
                     <button 
                       onClick={copyFullPrompt}
                       className={cn(
                         "flex items-center gap-2 px-4 py-2 transition-all rounded font-mono text-[10px] uppercase tracking-widest shadow-lg",
-                        briefMachineTheme === "high-contrast" ? "bg-yellow-400 text-black shadow-yellow-400/20" : "bg-[#c87941] text-white hover:bg-[#b06a38] shadow-[#c87941]/20"
+                        anomaLabTheme === "high-contrast" ? "bg-yellow-400 text-black shadow-yellow-400/20" : "bg-[#c87941] text-white hover:bg-[#b06a38] shadow-[#c87941]/20"
                       )}
                     >
                       {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -4008,7 +4008,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       onClick={clearPrompt}
                       className={cn(
                         "p-2 transition-all",
-                        briefMachineTheme === "high-contrast" ? "text-yellow-600 hover:text-yellow-400" : "text-zinc-600 hover:text-red-500"
+                        anomaLabTheme === "high-contrast" ? "text-yellow-600 hover:text-yellow-400" : "text-zinc-600 hover:text-red-500"
                       )}
                     >
                       <Trash2 size={18} />
@@ -4023,8 +4023,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     <div className="space-y-3">
                       <label className={cn(
                         "font-mono text-[10px] uppercase tracking-widest block",
-                        briefMachineTheme === "dark" ? "text-zinc-600" : 
-                        briefMachineTheme === "light" ? "text-zinc-400" : 
+                        anomaLabTheme === "dark" ? "text-zinc-600" : 
+                        anomaLabTheme === "light" ? "text-zinc-400" : 
                         "text-yellow-600"
                       )}>Raw Input / Paste Area</label>
                       <textarea 
@@ -4033,8 +4033,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         placeholder="Paste messy text here and click 'Beautify'..."
                         className={cn(
                           "w-full border p-4 font-mono text-xs focus:outline-none transition-all min-h-[80px] resize-none",
-                          briefMachineTheme === "dark" ? "bg-black/30 border-zinc-800 text-zinc-300 focus:border-[#c87941]" : 
-                          briefMachineTheme === "light" ? "bg-white border-zinc-200 text-zinc-700 focus:border-zinc-400" : 
+                          anomaLabTheme === "dark" ? "bg-black/30 border-zinc-800 text-zinc-300 focus:border-[#c87941]" : 
+                          anomaLabTheme === "light" ? "bg-white border-zinc-200 text-zinc-700 focus:border-zinc-400" : 
                           "bg-black border-yellow-400 text-yellow-400 focus:border-yellow-200"
                         )}
                       />
@@ -4053,7 +4053,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         <div key={section.key} className="space-y-3">
                           <label className={cn(
                             "font-mono text-[10px] uppercase tracking-widest block",
-                            briefMachineTheme === "high-contrast" ? "text-yellow-400" : section.color
+                            anomaLabTheme === "high-contrast" ? "text-yellow-400" : section.color
                           )}>
                             {section.label}
                           </label>
@@ -4062,10 +4062,10 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                             onChange={(e) => setBriefMachineShot(prev => ({ ...prev, [section.key]: e.target.value }))}
                             className={cn(
                               "w-full border p-4 font-sans text-sm focus:outline-none transition-all min-h-[100px] resize-none",
-                              briefMachineTheme === "dark" ? "bg-black/20 border-zinc-800 text-zinc-200 focus:border-[#c87941]" : 
-                              briefMachineTheme === "light" ? "bg-white border-zinc-200 text-zinc-800 focus:border-zinc-400" : 
+                              anomaLabTheme === "dark" ? "bg-black/20 border-zinc-800 text-zinc-200 focus:border-[#c87941]" : 
+                              anomaLabTheme === "light" ? "bg-white border-zinc-200 text-zinc-800 focus:border-zinc-400" : 
                               "bg-black border-yellow-400 text-yellow-400 focus:border-yellow-200",
-                              briefMachineTheme === "high-contrast" ? "border-yellow-400" : section.accent
+                              anomaLabTheme === "high-contrast" ? "border-yellow-400" : section.accent
                             )}
                             placeholder={`Describe ${section.label.toLowerCase()}...`}
                           />
@@ -4076,23 +4076,23 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     {/* Preview Area */}
                     <div className={cn(
                       "border p-8 rounded-lg space-y-6 transition-colors duration-500",
-                      briefMachineTheme === "dark" ? "bg-black/40 border-zinc-800" : 
-                      briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200" : 
+                      anomaLabTheme === "dark" ? "bg-black/40 border-zinc-800" : 
+                      anomaLabTheme === "light" ? "bg-zinc-50 border-zinc-200" : 
                       "bg-black border-yellow-400"
                     )}>
                       <div className="flex justify-between items-center">
                         <label className={cn(
                           "font-mono text-[10px] uppercase tracking-widest block",
-                          briefMachineTheme === "dark" ? "text-zinc-600" : 
-                          briefMachineTheme === "light" ? "text-zinc-400" : 
+                          anomaLabTheme === "dark" ? "text-zinc-600" : 
+                          anomaLabTheme === "light" ? "text-zinc-400" : 
                           "text-yellow-600"
                         )}>Full Prompt Preview</label>
                         <button 
                           onClick={copyFullPrompt}
                           className={cn(
                             "transition-all",
-                            briefMachineTheme === "dark" ? "text-zinc-500 hover:text-white" : 
-                            briefMachineTheme === "light" ? "text-zinc-400 hover:text-black" : 
+                            anomaLabTheme === "dark" ? "text-zinc-500 hover:text-white" : 
+                            anomaLabTheme === "light" ? "text-zinc-400 hover:text-black" : 
                             "text-yellow-600 hover:text-yellow-400"
                           )}
                         >
@@ -4101,18 +4101,18 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       </div>
                       <div className={cn(
                         "font-mono text-sm leading-relaxed",
-                        briefMachineTheme === "light" ? "text-zinc-800" : "text-white"
+                        anomaLabTheme === "light" ? "text-zinc-800" : "text-white"
                       )}>
                         <span className={cn(
-                          briefMachineTheme === "light" ? "text-black" : 
-                          briefMachineTheme === "high-contrast" ? "text-yellow-400" : 
+                          anomaLabTheme === "light" ? "text-black" : 
+                          anomaLabTheme === "high-contrast" ? "text-yellow-400" : 
                           "text-white"
                         )}>{briefMachineShot.subject}</span>
-                        {briefMachineShot.composition && <span className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-cyan-400"}>. {briefMachineShot.composition}</span>}
-                        {briefMachineShot.lighting && <span className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-orange-400"}>. {briefMachineShot.lighting}</span>}
-                        {briefMachineShot.camera && <span className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-purple-400"}>. {briefMachineShot.camera}</span>}
-                        {briefMachineShot.style && <span className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-emerald-400"}>. {briefMachineShot.style}</span>}
-                        {briefMachineShot.motion && <span className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-pink-400"}>. {briefMachineShot.motion}</span>}
+                        {briefMachineShot.composition && <span className={anomaLabTheme === "high-contrast" ? "text-yellow-400" : "text-cyan-400"}>. {briefMachineShot.composition}</span>}
+                        {briefMachineShot.lighting && <span className={anomaLabTheme === "high-contrast" ? "text-yellow-400" : "text-orange-400"}>. {briefMachineShot.lighting}</span>}
+                        {briefMachineShot.camera && <span className={anomaLabTheme === "high-contrast" ? "text-yellow-400" : "text-purple-400"}>. {briefMachineShot.camera}</span>}
+                        {briefMachineShot.style && <span className={anomaLabTheme === "high-contrast" ? "text-yellow-400" : "text-emerald-400"}>. {briefMachineShot.style}</span>}
+                        {briefMachineShot.motion && <span className={anomaLabTheme === "high-contrast" ? "text-yellow-400" : "text-pink-400"}>. {briefMachineShot.motion}</span>}
                       </div>
                     </div>
                   </div>
@@ -4122,8 +4122,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 {isStoryboardMode && (
                   <div className={cn(
                     "h-[180px] border-t p-4 flex gap-4 overflow-x-auto scrollbar-hide transition-colors duration-500",
-                    briefMachineTheme === "dark" ? "border-zinc-800 bg-black/50" : 
-                    briefMachineTheme === "light" ? "border-zinc-200 bg-zinc-50" : 
+                    anomaLabTheme === "dark" ? "border-zinc-800 bg-black/50" : 
+                    anomaLabTheme === "light" ? "border-zinc-200 bg-zinc-50" : 
                     "border-yellow-400 bg-black/50"
                   )}>
                     {briefMachineStoryboard.map((shot, i) => (
@@ -4132,15 +4132,15 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         onClick={() => setBriefMachineShot(shot)}
                         className={cn(
                           "w-60 h-full border flex-shrink-0 cursor-pointer group relative overflow-hidden transition-all",
-                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 hover:border-zinc-600" : 
-                          briefMachineTheme === "light" ? "bg-white border-zinc-200 hover:border-zinc-400" : 
+                          anomaLabTheme === "dark" ? "bg-zinc-900 border-zinc-800 hover:border-zinc-600" : 
+                          anomaLabTheme === "light" ? "bg-white border-zinc-200 hover:border-zinc-400" : 
                           "bg-black border-yellow-400 hover:border-yellow-200",
                           briefMachineShot.id === shot.id && "border-[#c87941] ring-1 ring-[#c87941]"
                         )}
                       >
                         <div className={cn(
                           "absolute top-2 left-2 z-10 px-2 py-0.5 rounded font-mono text-[8px]",
-                          briefMachineTheme === "light" ? "bg-zinc-200 text-zinc-800" : "bg-black/80 text-white"
+                          anomaLabTheme === "light" ? "bg-zinc-200 text-zinc-800" : "bg-black/80 text-white"
                         )}>
                           Shot {i + 1}
                         </div>
@@ -4149,20 +4149,20 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         ) : (
                           <div className={cn(
                             "w-full h-full flex items-center justify-center",
-                            briefMachineTheme === "light" ? "text-zinc-300" : "text-zinc-800"
+                            anomaLabTheme === "light" ? "text-zinc-300" : "text-zinc-800"
                           )}>
                             <ImageIcon size={32} />
                           </div>
                         )}
                         <div className={cn(
                           "absolute bottom-0 left-0 w-full p-2 border-t",
-                          briefMachineTheme === "dark" ? "bg-black/80 border-zinc-800" : 
-                          briefMachineTheme === "light" ? "bg-white/90 border-zinc-100" : 
+                          anomaLabTheme === "dark" ? "bg-black/80 border-zinc-800" : 
+                          anomaLabTheme === "light" ? "bg-white/90 border-zinc-100" : 
                           "bg-black/80 border-yellow-400"
                         )}>
                           <p className={cn(
                             "text-[9px] line-clamp-1 font-mono",
-                            briefMachineTheme === "light" ? "text-zinc-600" : "text-zinc-400"
+                            anomaLabTheme === "light" ? "text-zinc-600" : "text-zinc-400"
                           )}>{shot.subject}</p>
                         </div>
                       </div>
@@ -4259,7 +4259,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                 if (e.key === "Enter") {
                                   const url = (e.target as HTMLInputElement).value;
                                   if (url) {
-                                    setBriefMachineGallery([url, ...briefMachineGallery]);
+                                    setAnomaLabGallery([url, ...anomaLabGallery]);
                                     (e.target as HTMLInputElement).value = "";
                                   }
                                 }
@@ -4273,7 +4273,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                 if (file) {
                                   const reader = new FileReader();
                                   reader.onload = (ev) => {
-                                    if (ev.target?.result) setBriefMachineGallery([ev.target.result as string, ...briefMachineGallery]);
+                                    if (ev.target?.result) setAnomaLabGallery([ev.target.result as string, ...anomaLabGallery]);
                                   };
                                   reader.readAsDataURL(file);
                                 }
@@ -4286,11 +4286,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           "grid gap-4",
                           galleryGridCols === 1 ? "grid-cols-1" : galleryGridCols === 2 ? "grid-cols-2" : "grid-cols-2"
                         )}>
-                          {briefMachineGallery.map((url, i) => (
+                          {anomaLabGallery.map((url, i) => (
                             <div key={i} className="relative aspect-square bg-zinc-900 border border-zinc-800 group overflow-hidden rounded">
                               <img src={url} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                               <button 
-                                onClick={() => setBriefMachineGallery(prev => prev.filter((_, idx) => idx !== i))}
+                                onClick={() => setAnomaLabGallery(prev => prev.filter((_, idx) => idx !== i))}
                                 className="absolute top-2 right-2 p-1 bg-black/80 text-zinc-500 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"
                               >
                                 <X size={12} />
@@ -5338,7 +5338,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           </h3>
                           <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest px-2 py-0.5 border border-zinc-800 rounded">
                             {project.frames && project.frames.length > 0 ? "Storyboard" : 
-                             project.prompts && project.prompts.length > 0 ? "Brief Machine Lab" : 
+                             project.prompts && project.prompts.length > 0 ? "Anoma Lab" : 
                              project.extractedFrames && project.extractedFrames.length > 0 ? "Extractor" : "Project"}
                           </span>
                           <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">

@@ -36,6 +36,13 @@ export default function PromptEngine() {
   const [camMeta, setCamMeta] = useState<string>("");
   const [extra, setExtra] = useState<string>("");
   
+  const [clickToAdFields, setClickToAdFields] = useState({
+    productUrl: "",
+    brandIntent: "",
+    visualAnchors: "",
+    targetPlatform: "IG Reels"
+  });
+  
   const [isCameraExpanded, setIsCameraExpanded] = useState(false);
   const [output, setOutput] = useState<{ prompt: string; workflow: string; platform: string; label: string } | null>(null);
   const [savedPrompts, setSavedPrompts] = useState<SavedPrompt[]>([]);
