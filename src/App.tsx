@@ -275,6 +275,8 @@ interface SavedProject {
   name: string;
   input: string;
   frames: StoryboardFrame[];
+  prompts?: PromptCraftHistoryItem[];
+  extractedFrames?: ExtractorFrame[];
   thumbnailUrl?: string;
   createdAt: any;
   updatedAt: any;
@@ -456,7 +458,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "promptcraft">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "promptlab">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
@@ -480,6 +482,7 @@ export default function App() {
   const [storyboarderFrames, setStoryboarderFrames] = useState<StoryboardFrame[]>([]);
   const [isGeneratingStoryboarder, setIsGeneratingStoryboarder] = useState(false);
   const [isGeneratingIndividualFrame, setIsGeneratingIndividualFrame] = useState<number | null>(null);
+  const [briefHistory, setBriefHistory] = useState<string[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [savedProjects, setSavedProjects] = useState<SavedProject[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -826,7 +829,7 @@ export default function App() {
     };
     const updatedHistory = [newItem, ...promptCraftHistory].slice(0, 50);
     setPromptCraftHistory(updatedHistory);
-    localStorage.setItem("promptcraft_history", JSON.stringify(updatedHistory));
+    localStorage.setItem("promptlab_history", JSON.stringify(updatedHistory));
   };
 
   const copyFullPrompt = () => {
@@ -861,13 +864,13 @@ export default function App() {
     };
     const updated = [...promptCraftCharacters, newChar];
     setPromptCraftCharacters(updated);
-    localStorage.setItem("promptcraft_characters", JSON.stringify(updated));
+    localStorage.setItem("promptlab_characters", JSON.stringify(updated));
   };
 
   const deleteCharacter = (id: string) => {
     const updated = promptCraftCharacters.filter(c => c.id !== id);
     setPromptCraftCharacters(updated);
-    localStorage.setItem("promptcraft_characters", JSON.stringify(updated));
+    localStorage.setItem("promptlab_characters", JSON.stringify(updated));
   };
 
   const insertCharacter = (char: PromptCraftCharacter) => {
@@ -878,22 +881,25 @@ export default function App() {
   };
 
   useEffect(() => {
-    const savedHistory = localStorage.getItem("promptcraft_history");
+    const savedHistory = localStorage.getItem("promptlab_history");
     if (savedHistory) setPromptCraftHistory(JSON.parse(savedHistory));
     
-    const savedChars = localStorage.getItem("promptcraft_characters");
+    const savedChars = localStorage.getItem("promptlab_characters");
     if (savedChars) setPromptCraftCharacters(JSON.parse(savedChars));
 
-    const firstVisit = !localStorage.getItem("promptcraft_visited");
+    const savedBriefs = localStorage.getItem("brief_history");
+    if (savedBriefs) setBriefHistory(JSON.parse(savedBriefs));
+
+    const firstVisit = !localStorage.getItem("promptlab_visited");
     if (firstVisit) {
       setShowWelcomeModal(true);
-      localStorage.setItem("promptcraft_visited", "true");
+      localStorage.setItem("promptlab_visited", "true");
     }
   }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (view !== "promptcraft") return;
+      if (view !== "promptlab") return;
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         copyFullPrompt();
       }
@@ -945,25 +951,31 @@ export default function App() {
     a.click();
   };
 
-  const saveStoryboard = async () => {
+  const saveProject = async (type: 'storyboard' | 'prompt' | 'extractor' = 'storyboard') => {
     if (!user) {
       setError("Please sign in to save your work.");
       return;
     }
-    if (storyboarderFrames.length === 0) return;
-
+    
     setIsSaving(true);
-    const projectId = storyboarderProjectName.replace(/\s+/g, '-').toLowerCase() + '-' + Date.now();
+    const projectName = type === 'storyboard' ? storyboarderProjectName : 
+                        type === 'prompt' ? `Prompt Lab ${new Date().toLocaleDateString()}` :
+                        `Extractor ${new Date().toLocaleDateString()}`;
+    
+    const projectId = projectName.replace(/\s+/g, '-').toLowerCase() + '-' + Date.now();
     const path = `storyboards/${projectId}`;
     try {
       const projectRef = doc(db, "storyboards", projectId);
       
-      const projectData = {
+      const projectData: any = {
         userId: user.uid,
-        name: storyboarderProjectName,
-        input: storyboarderInput,
-        frames: storyboarderFrames,
-        thumbnailUrl: storyboarderFrames[0]?.visual_url || null,
+        name: projectName,
+        input: type === 'storyboard' ? storyboarderInput : "",
+        frames: type === 'storyboard' ? storyboarderFrames : [],
+        prompts: type === 'prompt' ? promptCraftHistory : [],
+        extractedFrames: type === 'extractor' ? extractorFrames : [],
+        thumbnailUrl: type === 'storyboard' ? (storyboarderFrames[0]?.visual_url || null) : 
+                      type === 'extractor' ? (extractorFrames[0]?.url || null) : null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -980,10 +992,18 @@ export default function App() {
   };
 
   const loadProject = (project: SavedProject) => {
-    setStoryboarderProjectName(project.name);
-    setStoryboarderInput(project.input);
-    setStoryboarderFrames(project.frames);
-    setView("storyboarder");
+    if (project.frames && project.frames.length > 0) {
+      setStoryboarderProjectName(project.name);
+      setStoryboarderInput(project.input || "");
+      setStoryboarderFrames(project.frames);
+      setView("storyboarder");
+    } else if (project.prompts && project.prompts.length > 0) {
+      setPromptCraftHistory(project.prompts);
+      setView("promptlab");
+    } else if (project.extractedFrames && project.extractedFrames.length > 0) {
+      setExtractorFrames(project.extractedFrames);
+      setView("extractor");
+    }
   };
 
   const deleteProject = async (projectId: string) => {
@@ -1238,6 +1258,14 @@ Think D&AD. Think Cannes.`,
       setQuickFireResults(parsed.quick_fire || []);
       setExpandedConcept(0);
       setSelectedConcepts([]);
+      
+      // Save to history
+      setBriefHistory(prev => {
+        const next = [briefInput, ...prev.filter(b => b !== briefInput)].slice(0, 10);
+        localStorage.setItem("brief_history", JSON.stringify(next));
+        return next;
+      });
+
       setView("results");
     } catch (e) {
       console.error(e);
@@ -2488,21 +2516,21 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 id: "engine_group", 
                 label: "Engine", 
                 icon: Zap, 
-                active: view === "input" || view === "results" || view === "prompt",
+                active: view === "input" || view === "results" || view === "prompt" || view === "promptlab",
                 subItems: [
                   { id: "input", label: "Concepts" },
-                  { id: "prompt", label: "DNA" }
+                  { id: "prompt", label: "DNA" },
+                  { id: "promptlab", label: "Lab" }
                 ]
               },
               { 
                 id: "studio_group", 
                 label: "Studio", 
                 icon: Layout, 
-                active: view === "storyboarder" || view === "extractor" || view === "promptcraft",
+                active: view === "storyboarder" || view === "extractor",
                 subItems: [
                   { id: "storyboarder", label: "Storyboard" },
-                  { id: "extractor", label: "Extractor" },
-                  { id: "promptcraft", label: "PromptCraft" }
+                  { id: "extractor", label: "Extractor" }
                 ]
               },
               { 
@@ -2647,6 +2675,38 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               </div>
 
               {/* Attached Frames from Extractor */}
+              {briefHistory.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
+                      Recent Briefs
+                    </label>
+                    <button 
+                      onClick={() => {
+                        setBriefHistory([]);
+                        localStorage.removeItem("brief_history");
+                      }}
+                      className="font-mono text-[8px] text-red-500 hover:text-red-400 uppercase tracking-widest"
+                    >
+                      Clear History
+                    </button>
+                  </div>
+                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+                    {briefHistory.map((brief, i) => (
+                      <button 
+                        key={i}
+                        onClick={() => setBriefInput(brief)}
+                        className="flex-shrink-0 w-64 p-4 bg-zinc-900/30 border border-zinc-800 hover:border-zinc-600 transition-all text-left group"
+                      >
+                        <p className="text-[10px] text-zinc-400 line-clamp-2 group-hover:text-white transition-colors italic">
+                          "{brief}"
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {attachedExtractorFrames.length > 0 && (
                 <div className="space-y-4">
                   <div className="flex justify-between items-center">
@@ -3322,12 +3382,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             )}
           </AnimatePresence>
 
-          {/* PROMPTCRAFT VIEW */}
-          {view === "promptcraft" && (
+          {/* PROMPT LAB VIEW */}
+          {view === "promptlab" && (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="fixed inset-0 top-[88px] bg-[#0a1628] text-[#e0e0e0] z-40 flex overflow-hidden font-sans"
+              className="bg-black text-[#e0e0e0] flex overflow-hidden font-sans min-h-[calc(100vh-200px)] border border-zinc-800"
             >
               {/* Left Sidebar */}
               <AnimatePresence>
@@ -3336,7 +3396,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     initial={{ x: -300 }}
                     animate={{ x: 0 }}
                     exit={{ x: -300 }}
-                    className="w-[300px] border-r border-zinc-800 flex flex-col bg-[#0a1628]"
+                    className="w-[300px] border-r border-zinc-800 flex flex-col bg-black"
                   >
                     <div className="flex border-b border-zinc-800">
                       <button 
@@ -3472,7 +3532,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                     e.stopPropagation();
                                     const updated = promptCraftHistory.filter(h => h.id !== item.id);
                                     setPromptCraftHistory(updated);
-                                    localStorage.setItem("promptcraft_history", JSON.stringify(updated));
+                                    localStorage.setItem("promptlab_history", JSON.stringify(updated));
                                   }}
                                 />
                               </div>
@@ -3496,11 +3556,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               </button>
 
               {/* Main Area */}
-              <div className="flex-1 flex flex-col bg-[#0a1628] overflow-hidden">
+              <div className="flex-1 flex flex-col bg-black overflow-hidden">
                 {/* Toolbar */}
-                <div className="h-[60px] border-b border-zinc-800 flex items-center justify-between px-6 bg-[#0a1628]/80 backdrop-blur-md z-30">
+                <div className="h-[60px] border-b border-zinc-800 flex items-center justify-between px-6 bg-black/80 backdrop-blur-md z-30">
                   <div className="flex items-center gap-4">
-                    <h1 className="font-display text-xl text-white italic tracking-tight">PromptCraft</h1>
+                    <h1 className="font-display text-xl text-white italic tracking-tight">Prompt Lab</h1>
                     <div className="h-4 w-[1px] bg-zinc-800" />
                     <div className="flex items-center gap-2">
                       <button 
@@ -3549,6 +3609,16 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   </div>
 
                   <div className="flex items-center gap-3">
+                    {user && (
+                      <button 
+                        onClick={() => saveProject('prompt')}
+                        disabled={isSaving}
+                        className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest"
+                      >
+                        {isSaving ? <RefreshCcw size={14} className="animate-spin" /> : <Save size={14} />}
+                        Save Lab
+                      </button>
+                    )}
                     <button 
                       onClick={copyFullPrompt}
                       className="flex items-center gap-2 px-4 py-2 bg-[#c87941] text-white hover:bg-[#b06a38] transition-all rounded font-mono text-[10px] uppercase tracking-widest shadow-lg shadow-[#c87941]/20"
@@ -3671,7 +3741,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 )}
 
                 {/* Bottom Bar */}
-                <div className="h-[40px] border-t border-zinc-800 bg-[#0a1628] flex items-center justify-between px-6">
+                <div className="h-[40px] border-t border-zinc-800 bg-black flex items-center justify-between px-6">
                   <div className="flex items-center gap-6">
                     <button 
                       onClick={() => setIsStoryboardMode(!isStoryboardMode)}
@@ -3717,7 +3787,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     initial={{ x: 400 }}
                     animate={{ x: 0 }}
                     exit={{ x: 400 }}
-                    className="w-[400px] border-l border-zinc-800 flex flex-col bg-[#0a1628]"
+                    className="w-[400px] border-l border-zinc-800 flex flex-col bg-black"
                   >
                     <div className="h-[60px] border-b border-zinc-800 flex items-center justify-between px-6">
                       <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">Gallery / Preview</span>
@@ -3909,7 +3979,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     <div className="flex gap-2">
                       {user && (
                         <button 
-                          onClick={saveStoryboard}
+                          onClick={() => saveProject('storyboard')}
                           disabled={isSaving}
                           className="font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
                         >
@@ -4387,6 +4457,16 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                   Export {selectedExtractorFrames.length > 0 ? `(${selectedExtractorFrames.length})` : "All"}
                                 </button>
                               )}
+                              {user && extractorFrames.length > 0 && (
+                                <button
+                                  onClick={() => saveProject('extractor')}
+                                  disabled={isSaving}
+                                  className="px-6 py-3 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 font-display italic text-lg transition-all flex items-center gap-3"
+                                >
+                                  {isSaving ? <RefreshCcw size={16} className="animate-spin" /> : <Save size={16} />}
+                                  Save to Project
+                                </button>
+                              )}
                             </div>
                           </div>
 
@@ -4758,8 +4838,13 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           <h3 className="font-display text-2xl text-white group-hover:text-zinc-200 transition-colors">
                             {project.name}
                           </h3>
+                          <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest px-2 py-0.5 border border-zinc-800 rounded">
+                            {project.frames && project.frames.length > 0 ? "Storyboard" : 
+                             project.prompts && project.prompts.length > 0 ? "Prompt Lab" : 
+                             project.extractedFrames && project.extractedFrames.length > 0 ? "Extractor" : "Project"}
+                          </span>
                           <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
-                            {project.frames.length} Shots
+                            {project.frames?.length || project.prompts?.length || project.extractedFrames?.length || 0} Items
                           </span>
                         </div>
                         <p className="text-xs text-zinc-500 font-mono uppercase tracking-widest">
@@ -4943,7 +5028,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 <motion.div 
                   initial={{ scale: 0.9, opacity: 0 }}
                   animate={{ scale: 1, opacity: 1 }}
-                  className="bg-[#0a1628] border border-zinc-800 p-10 max-w-2xl w-full space-y-8 relative"
+                  className="bg-black border border-zinc-800 p-10 max-w-2xl w-full space-y-8 relative"
                 >
                   <button 
                     onClick={() => setShowWelcomeModal(false)}
