@@ -59,6 +59,42 @@ interface ExtractorFrame {
   time?: number;
 }
 
+const STORYBOARD_TEMPLATES = [
+  {
+    id: "3-act",
+    name: "3-Act Structure",
+    description: "Classic narrative arc: Setup, Confrontation, Resolution.",
+    frames: [
+      { frame_description: "Establishing shot: The world before the conflict. Calm, wide, atmospheric.", annotation: "Wide shot, slow pan.", camera_angle: "Wide", lighting: "Natural", atmosphere: "Calm" },
+      { frame_description: "The inciting incident: Something changes. Close-up on the catalyst.", annotation: "Close-up, sharp focus.", camera_angle: "Close-up", lighting: "Dramatic", atmosphere: "Tense" },
+      { frame_description: "The climax: The highest point of tension. Fast-paced, dynamic.", annotation: "Handheld, shaky cam.", camera_angle: "Dutch Angle", lighting: "High Contrast", atmosphere: "Chaotic" },
+      { frame_description: "The resolution: The new normal. Soft, lingering shot.", annotation: "Slow zoom out.", camera_angle: "Medium", lighting: "Soft", atmosphere: "Peaceful" }
+    ]
+  },
+  {
+    id: "social-ad",
+    name: "Quick Cut Social Ad",
+    description: "High-energy, fast-paced for mobile platforms.",
+    frames: [
+      { frame_description: "The Hook: Stop the scroll. Bold colors, immediate action.", annotation: "Fast zoom in.", camera_angle: "Eye-level", lighting: "Vibrant", atmosphere: "Energetic" },
+      { frame_description: "The Problem: Relatable frustration. Close-up on emotion.", annotation: "Extreme close-up.", camera_angle: "Close-up", lighting: "Cool tones", atmosphere: "Frustrated" },
+      { frame_description: "The Solution: Product reveal. Hero shot, glowing.", annotation: "Low angle, hero shot.", camera_angle: "Low Angle", lighting: "Golden hour", atmosphere: "Triumphant" },
+      { frame_description: "Call to Action: Text overlay, final brand shot.", annotation: "Static shot, text overlay.", camera_angle: "Medium", lighting: "Clean", atmosphere: "Direct" }
+    ]
+  },
+  {
+    id: "cinematic-teaser",
+    name: "Cinematic Teaser",
+    description: "Moody, atmospheric, and mysterious.",
+    frames: [
+      { frame_description: "Mystery: A silhouette in the fog. Low light, high mystery.", annotation: "Tracking shot, slow.", camera_angle: "Low Angle", lighting: "Chiaroscuro", atmosphere: "Mysterious" },
+      { frame_description: "Detail: A macro shot of a key object. Sharp detail, shallow depth.", annotation: "Macro shot.", camera_angle: "Macro", lighting: "Spotlight", atmosphere: "Clinical" },
+      { frame_description: "Scale: A massive landscape or structure. Emphasize isolation.", annotation: "Drone shot, high.", camera_angle: "Bird's Eye", lighting: "Overcast", atmosphere: "Epic" },
+      { frame_description: "The Reveal: A brief glimpse of the protagonist. Intense gaze.", annotation: "Extreme close-up on eyes.", camera_angle: "Extreme Close-up", lighting: "Hard light", atmosphere: "Intense" }
+    ]
+  }
+];
+
 const MASTER_PROMPT = `You are an elite creative strategist who thinks at D&AD Black Pencil / Young Ones / Cannes Grand Prix level. You generate advertising concepts that win because of the IDEA — not the budget, not the production, not the celebrity. The idea is the weapon.
 
 YOUR CREATIVE PHILOSOPHY:
@@ -208,11 +244,19 @@ interface StoryboardFrame {
   };
 }
 
+interface PastTrend {
+  id: string;
+  trends: Trend[];
+  createdAt: any;
+  userId: string;
+}
+
 interface SavedProject {
   id: string;
   name: string;
   input: string;
   frames: StoryboardFrame[];
+  thumbnailUrl?: string;
   createdAt: any;
   updatedAt: any;
   userId: string;
@@ -364,7 +408,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
@@ -394,6 +438,8 @@ export default function App() {
   const [isLoadingProjects, setIsLoadingProjects] = useState(false);
   const [selectedTrend, setSelectedTrend] = useState<Trend | null>(null);
   const [isFetchingMoreTrends, setIsFetchingMoreTrends] = useState(false);
+  const [pastTrends, setPastTrends] = useState<PastTrend[]>([]);
+  const [isLoadingPastTrends, setIsLoadingPastTrends] = useState(false);
   const [videoAspectRatio, setVideoAspectRatio] = useState<"16:9" | "9:16">("16:9");
   const [isExportingImages, setIsExportingImages] = useState(false);
   const [isExportingVideo, setIsExportingVideo] = useState(false);
@@ -430,6 +476,7 @@ export default function App() {
   const [refiningBackgroundIndex, setRefiningBackgroundIndex] = useState<number | null>(null);
   const [backgroundRefinementPrompt, setBackgroundRefinementPrompt] = useState("");
   const [extractorRenamePrefix, setExtractorRenamePrefix] = useState("frame");
+  const [extractorScrubTime, setExtractorScrubTime] = useState(0);
   const extractorVideoRef = useRef<HTMLVideoElement>(null);
 
   // Auto-save Storyboard Draft
@@ -502,6 +549,15 @@ export default function App() {
     }
   };
 
+  const applyTemplate = (templateId: string) => {
+    const template = STORYBOARD_TEMPLATES.find(t => t.id === templateId);
+    if (template) {
+      setStoryboarderFrames(template.frames.map(f => ({ ...f })));
+      setStoryboarderProjectName(template.name);
+      setStoryboarderInput(`Template: ${template.name}\n${template.description}`);
+    }
+  };
+
   const saveStoryboard = async () => {
     if (!user) {
       setError("Please sign in to save your work.");
@@ -520,6 +576,7 @@ export default function App() {
         name: storyboarderProjectName,
         input: storyboarderInput,
         frames: storyboarderFrames,
+        thumbnailUrl: storyboarderFrames[0]?.visual_url || null,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
@@ -1354,6 +1411,16 @@ Think D&AD. Think Cannes.`,
         setTrends([...trends, ...parsed.trends]);
       } else {
         setTrends(parsed.trends);
+        // Save to past trends if user is logged in
+        if (user && parsed.trends.length > 0) {
+          const trendDocId = `trends-${Date.now()}`;
+          const trendRef = doc(db, "pastTrends", trendDocId);
+          await setDoc(trendRef, {
+            userId: user.uid,
+            trends: parsed.trends,
+            createdAt: serverTimestamp(),
+          });
+        }
       }
       setView("trends");
     } catch (e) {
@@ -1362,6 +1429,29 @@ Think D&AD. Think Cannes.`,
       if (!loadMore) setView("input");
     } finally {
       setIsFetchingMoreTrends(false);
+    }
+  };
+
+  const fetchPastTrends = async () => {
+    if (!user) return;
+    setIsLoadingPastTrends(true);
+    setView("pastTrends");
+    try {
+      const q = query(
+        collection(db, "pastTrends"),
+        where("userId", "==", user.uid),
+        orderBy("createdAt", "desc")
+      );
+      const querySnapshot = await getDocs(q);
+      const trendsData: PastTrend[] = [];
+      querySnapshot.forEach((doc) => {
+        trendsData.push({ id: doc.id, ...doc.data() } as PastTrend);
+      });
+      setPastTrends(trendsData);
+    } catch (e) {
+      handleFirestoreError(e, OperationType.GET, "pastTrends");
+    } finally {
+      setIsLoadingPastTrends(false);
     }
   };
 
@@ -1999,6 +2089,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               { id: "extractor", label: "Frame Extractor", icon: Scissors },
               { id: "projects", label: "Saved Projects", icon: Folder, action: user ? () => { fetchSavedProjects(user.uid); setView("projects"); } : undefined },
               { id: "shortlist", label: "Shortlist", icon: Check },
+              { id: "pastTrends", label: "Past Trends", icon: Clock, action: user ? fetchPastTrends : undefined },
               { id: "prompt", label: "Prompt DNA", icon: Code },
             ].map((item) => (
               <button
@@ -2775,6 +2866,22 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     </div>
                   </div>
 
+                  <div className="space-y-4">
+                    <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Storyboard Templates</label>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {STORYBOARD_TEMPLATES.map(template => (
+                        <button
+                          key={template.id}
+                          onClick={() => applyTemplate(template.id)}
+                          className="p-4 bg-zinc-900/50 border border-zinc-800 hover:border-zinc-600 transition-all text-left group"
+                        >
+                          <h4 className="font-display text-lg text-white italic group-hover:text-zinc-200">{template.name}</h4>
+                          <p className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest mt-1">{template.description}</p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
                     <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">The Script / Story</label>
                     <textarea 
@@ -3111,7 +3218,71 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                             src={extractorVideoUrl} 
                             className="w-full h-full object-contain"
                             controls
+                            onTimeUpdate={(e) => setExtractorScrubTime(e.currentTarget.currentTime)}
                           />
+                        </div>
+
+                        {/* Timeline Slider */}
+                        <div className="space-y-2 p-4 bg-zinc-950 border border-zinc-800">
+                          <div className="flex justify-between items-center font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
+                            <span>{extractorScrubTime.toFixed(1)}s</span>
+                            <span>{extractorVideoRef.current?.duration ? extractorVideoRef.current.duration.toFixed(1) : "0.0"}s</span>
+                          </div>
+                          <div className="relative h-6 flex items-center">
+                            <input 
+                              type="range"
+                              min="0"
+                              max={extractorVideoRef.current?.duration || 100}
+                              step="0.1"
+                              value={extractorScrubTime}
+                              onChange={(e) => {
+                                const time = parseFloat(e.target.value);
+                                setExtractorScrubTime(time);
+                                if (extractorVideoRef.current) {
+                                  extractorVideoRef.current.currentTime = time;
+                                }
+                              }}
+                              className="w-full accent-white h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer relative z-10"
+                            />
+                            {/* Frame Markers */}
+                            <div className="absolute inset-0 pointer-events-none">
+                              {extractorFrames.map((frame, i) => (
+                                <div 
+                                  key={i}
+                                  className={cn(
+                                    "absolute top-1/2 -translate-y-1/2 w-1 h-3 transition-all",
+                                    selectedExtractorFrames.includes(i) ? "bg-cyan-500 h-4 z-20" : "bg-zinc-600"
+                                  )}
+                                  style={{ 
+                                    left: `${(frame.time / (extractorVideoRef.current?.duration || 1)) * 100}%` 
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <p className="font-mono text-[8px] text-zinc-700 uppercase tracking-widest">Scrub to preview & select frames</p>
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={() => {
+                                  // Select frame closest to current scrub time
+                                  const closestIdx = extractorFrames.reduce((prev, curr, idx) => {
+                                    const prevDiff = Math.abs(extractorFrames[prev].time - extractorScrubTime);
+                                    const currDiff = Math.abs(curr.time - extractorScrubTime);
+                                    return currDiff < prevDiff ? idx : prev;
+                                  }, 0);
+                                  if (extractorFrames.length > 0) {
+                                    setSelectedExtractorFrames(prev => 
+                                      prev.includes(closestIdx) ? prev.filter(id => id !== closestIdx) : [...prev, closestIdx]
+                                    );
+                                  }
+                                }}
+                                className="px-2 py-1 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 font-mono text-[8px] uppercase tracking-widest transition-all"
+                              >
+                                Toggle Nearest Frame
+                              </button>
+                            </div>
+                          </div>
                         </div>
                         
                         <div className="p-6 bg-zinc-900/30 border border-zinc-800 space-y-6">
@@ -3602,8 +3773,13 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   {savedProjects.map((project) => (
                     <motion.div 
                       key={project.id}
-                      className="group bg-zinc-900/30 border border-zinc-800 p-8 hover:border-zinc-600 transition-all flex justify-between items-center"
+                      className="group bg-zinc-900/30 border border-zinc-800 p-6 hover:border-zinc-600 transition-all flex gap-8 items-center"
                     >
+                      {project.thumbnailUrl && (
+                        <div className="w-40 aspect-video bg-black border border-zinc-800 overflow-hidden flex-shrink-0">
+                          <img src={project.thumbnailUrl} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                        </div>
+                      )}
                       <div className="space-y-2 flex-1 cursor-pointer" onClick={() => loadProject(project)}>
                         <div className="flex items-center gap-4">
                           <h3 className="font-display text-2xl text-white group-hover:text-zinc-200 transition-colors">
@@ -3634,6 +3810,76 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         </button>
                       </div>
                     </motion.div>
+                  ))}
+                </div>
+              )}
+            </motion.div>
+          )}
+
+          {/* PAST TRENDS VIEW */}
+          {view === "pastTrends" && user && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-12"
+            >
+              <div className="flex justify-between items-end border-b border-zinc-800 pb-10">
+                <div className="space-y-2">
+                  <h2 className="font-display text-5xl text-white italic">Trend Archive</h2>
+                  <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Historical context for current creative strategies</p>
+                </div>
+              </div>
+
+              {isLoadingPastTrends ? (
+                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                  <RefreshCcw size={32} className="text-zinc-800 animate-spin" />
+                  <p className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Retrieving Archive...</p>
+                </div>
+              ) : pastTrends.length === 0 ? (
+                <div className="text-center py-20 border border-dashed border-zinc-800">
+                  <Search size={48} className="text-zinc-800 mx-auto mb-4" />
+                  <p className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">No past trends found in the archive.</p>
+                </div>
+              ) : (
+                <div className="space-y-16">
+                  {pastTrends.map((session) => (
+                    <div key={session.id} className="space-y-6">
+                      <div className="flex items-center gap-4 border-b border-zinc-900 pb-4">
+                        <Clock size={14} className="text-zinc-700" />
+                        <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">
+                          Scanned on: {session.createdAt instanceof Timestamp ? session.createdAt.toDate().toLocaleString() : 'Recently'}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {session.trends.map((trend, idx) => (
+                          <motion.div 
+                            key={idx}
+                            className="bg-zinc-900/30 border border-zinc-800 p-8 hover:border-zinc-600 transition-all flex flex-col justify-between group"
+                          >
+                            <div className="space-y-6">
+                              <h3 className="font-display text-3xl text-white group-hover:text-zinc-200 transition-colors leading-tight italic">{trend.name}</h3>
+                              <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest leading-relaxed">{trend.why_it_matters}</p>
+                              <div className="pt-4 border-t border-zinc-800/50">
+                                <p className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest mb-2">Emotional Undercurrent</p>
+                                <p className="text-xs text-zinc-400 italic">{trend.emotional_undercurrent}</p>
+                              </div>
+                            </div>
+                            <div className="mt-8 pt-6 border-t border-zinc-800 flex flex-col gap-3">
+                              <button 
+                                onClick={() => {
+                                  setBriefInput(trend.brief_starter);
+                                  setView("input");
+                                }}
+                                className="w-full py-3 bg-white text-black font-mono text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
+                              >
+                                <Zap size={12} />
+                                Use as Brief
+                              </button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

@@ -17,6 +17,15 @@ service cloud.firestore {
     //
     // ===============================================================
 
+    // Collection: pastTrends
+    // Document ID: trends-{timestamp}
+    // Fields:
+    //   - userId: string (required) - Owner UID
+    //   - trends: list (required) - Array of Trend objects (max 20)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
     // Helper Functions
     function isAuthenticated() {
       return request.auth != null;
@@ -40,6 +49,13 @@ service cloud.firestore {
              data.updatedAt is timestamp;
     }
 
+    function isValidPastTrend(data) {
+      return data.keys().hasAll(['userId', 'trends', 'createdAt']) &&
+             data.userId is string &&
+             data.trends is list && data.trends.size() <= 20 &&
+             data.createdAt is timestamp;
+    }
+
     match /storyboards/{storyboardId} {
       allow read: if isAuthenticated() && isDocOwner();
       allow create: if isAuthenticated() && 
@@ -50,6 +66,14 @@ service cloud.firestore {
                       isOwner(request.resource.data.userId) && 
                       isValidStoryboard(request.resource.data) &&
                       request.resource.data.createdAt == resource.data.createdAt;
+      allow delete: if isAuthenticated() && isDocOwner();
+    }
+
+    match /pastTrends/{trendId} {
+      allow read: if isAuthenticated() && isDocOwner();
+      allow create: if isAuthenticated() && 
+                      isOwner(request.resource.data.userId) && 
+                      isValidPastTrend(request.resource.data);
       allow delete: if isAuthenticated() && isDocOwner();
     }
     
