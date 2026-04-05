@@ -512,6 +512,7 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
 };
 
 import { geminiService } from "./services/geminiService";
+import PromptEngine from "./components/PromptEngine";
 
 // --- Components ---
 
@@ -563,7 +564,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "briefMachineLab">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "briefMachineLab" | "promptEngine">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
@@ -2628,11 +2629,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 id: "engine_group", 
                 label: "Engine", 
                 icon: Zap, 
-                active: view === "input" || view === "results" || view === "prompt" || view === "briefMachineLab",
+                active: view === "input" || view === "results" || view === "prompt" || view === "briefMachineLab" || view === "promptEngine",
                 subItems: [
                   { id: "input", label: "Concepts" },
                   { id: "prompt", label: "DNA" },
-                  { id: "briefMachineLab", label: "Brief Machine Lab" }
+                  { id: "briefMachineLab", label: "Brief Machine Lab" },
+                  { id: "promptEngine", label: "Prompt Engine" }
                 ]
               },
               { 
@@ -4310,6 +4312,15 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               >
                 {isBriefMachineRightPanelOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
               </button>
+            </motion.div>
+          )}
+          {view === "promptEngine" && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <PromptEngine />
             </motion.div>
           )}
           {view === "storyboarder" && (
