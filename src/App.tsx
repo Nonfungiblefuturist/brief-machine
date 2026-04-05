@@ -43,11 +43,21 @@ import {
   FileImage,
   Camera,
   Scissors,
-  Video
+  Video,
+  Clock,
+  LayoutGrid,
+  Play
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
 // --- Prompts ---
+
+interface ExtractorFrame {
+  url: string;
+  name?: string;
+  backgroundUrl?: string;
+  time?: number;
+}
 
 const MASTER_PROMPT = `You are an elite creative strategist who thinks at D&AD Black Pencil / Young Ones / Cannes Grand Prix level. You generate advertising concepts that win because of the IDEA — not the budget, not the production, not the celebrity. The idea is the weapon.
 
@@ -407,25 +417,20 @@ export default function App() {
   // Extractor State
   const [extractorVideoFile, setExtractorVideoFile] = useState<File | null>(null);
   const [extractorVideoUrl, setExtractorVideoUrl] = useState<string | null>(null);
-  const [extractorFrames, setExtractorFrames] = useState<string[]>([]);
+  const [extractorFrames, setExtractorFrames] = useState<ExtractorFrame[]>([]);
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionInterval, setExtractionInterval] = useState(1); // seconds
   const [selectedExtractorFrames, setSelectedExtractorFrames] = useState<number[]>([]);
   const [extractorExportFormat, setExtractorExportFormat] = useState<'jpg' | 'png'>('jpg');
   const [extractorThumbnailSize, setExtractorThumbnailSize] = useState<'sm' | 'md' | 'lg'>('md');
   const [extractorAspectRatio, setExtractorAspectRatio] = useState<'16:9' | '9:16'>('16:9');
-  const [hoveredFrame, setHoveredFrame] = useState<string | null>(null);
-  const [extractorBackgrounds, setExtractorBackgrounds] = useState<Record<number, string>>({});
+  const [hoveredFrame, setHoveredFrame] = useState<ExtractorFrame | null>(null);
+  const [extractorViewMode, setExtractorViewMode] = useState<'grid' | 'timeline'>('grid');
   const [isGeneratingExtractorBackground, setIsGeneratingExtractorBackground] = useState<number | null>(null);
   const [refiningBackgroundIndex, setRefiningBackgroundIndex] = useState<number | null>(null);
   const [backgroundRefinementPrompt, setBackgroundRefinementPrompt] = useState("");
+  const [extractorRenamePrefix, setExtractorRenamePrefix] = useState("frame");
   const extractorVideoRef = useRef<HTMLVideoElement>(null);
-
-  const getCreditEstimate = (model: string, length: string) => {
-    const base = model === "Cinema Studio" ? 100 : 50;
-    const multiplier = length === ":60s" ? 2 : length === ":30s" ? 1 : 0.5;
-    return Math.round(base * multiplier);
-  };
 
   // Auto-save Storyboard Draft
   useEffect(() => {
@@ -881,7 +886,7 @@ Think D&AD. Think Cannes.`,
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const frame = canvas.toDataURL('image/jpeg', 0.9);
-    setExtractorFrames(prev => [...prev, frame]);
+    setExtractorFrames(prev => [...prev, { url: frame, time: video.currentTime }]);
   }, []);
 
   const autoExtractFrames = async () => {
@@ -909,6 +914,13 @@ Think D&AD. Think Cannes.`,
     setIsExtracting(false);
   };
 
+  const seekToFrameTime = (time?: number) => {
+    if (time !== undefined && extractorVideoRef.current) {
+      extractorVideoRef.current.currentTime = time;
+      extractorVideoRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   const exportExtractorFramesAsZip = async () => {
     const framesToExport = selectedExtractorFrames.length > 0 
       ? extractorFrames.filter((_, i) => selectedExtractorFrames.includes(i))
@@ -921,8 +933,9 @@ Think D&AD. Think Cannes.`,
       const folder = zip.folder("extracted-frames");
       
       framesToExport.forEach((frame, i) => {
-        const base64Data = frame.split(',')[1];
-        folder?.file(`frame-${i + 1}.${extractorExportFormat}`, base64Data, { base64: true });
+        const base64Data = frame.url.split(',')[1];
+        const fileName = frame.name || `frame-${i + 1}`;
+        folder?.file(`${fileName}.${extractorExportFormat}`, base64Data, { base64: true });
       });
       
       const content = await zip.generateAsync({ type: "blob" });
@@ -939,7 +952,19 @@ Think D&AD. Think Cannes.`,
     }
   };
 
-  const sendFrameToEngine = (frame: string | string[]) => {
+  const batchRenameFrames = () => {
+    if (selectedExtractorFrames.length === 0) return;
+    setExtractorFrames(prev => {
+      const next = [...prev];
+      // Sort indices to ensure sequential numbering matches visual order
+      [...selectedExtractorFrames].sort((a, b) => a - b).forEach((idx, i) => {
+        next[idx] = { ...next[idx], name: `${extractorRenamePrefix}_${String(i + 1).padStart(3, '0')}` };
+      });
+      return next;
+    });
+  };
+
+  const sendFrameToEngine = (frame: ExtractorFrame | ExtractorFrame[]) => {
     const frameCount = Array.isArray(frame) ? frame.length : 1;
     setBriefInput(`Concept inspired by ${frameCount > 1 ? "these visual references" : "this visual reference"}: [Visual Reference Attached]`);
     // In a real app we might attach the image to the state, 
@@ -966,7 +991,7 @@ Think D&AD. Think Cannes.`,
         model: 'gemini-2.5-flash-image',
         contents: {
           parts: [
-            { inlineData: { data: frame.split(',')[1], mimeType: "image/jpeg" } },
+            { inlineData: { data: frame.url.split(',')[1], mimeType: "image/jpeg" } },
             { text: prompt }
           ]
         },
@@ -984,7 +1009,11 @@ Think D&AD. Think Cannes.`,
       }
 
       if (imageUrl) {
-        setExtractorBackgrounds(prev => ({ ...prev, [index]: imageUrl }));
+        setExtractorFrames(prev => {
+          const next = [...prev];
+          next[index] = { ...next[index], backgroundUrl: imageUrl };
+          return next;
+        });
       }
     } catch (err) {
       console.error(err);
@@ -996,8 +1025,8 @@ Think D&AD. Think Cannes.`,
     }
   };
 
-  const sendFrameToStoryboarder = (frame: string) => {
-    setStoryboarderImages(prev => [...prev, frame]);
+  const sendFrameToStoryboarder = (frame: ExtractorFrame) => {
+    setStoryboarderImages(prev => [...prev, frame.url]);
     setView("storyboarder");
   };
 
@@ -2130,10 +2159,6 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       </button>
                     ))}
                   </div>
-                  <div className="flex items-center justify-between p-3 bg-zinc-900/30 border border-zinc-800">
-                    <span className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest">Est. Credit Cost:</span>
-                    <span className="font-display text-sm text-yellow-500">{getCreditEstimate(higgsfieldModel, videoLength)} Credits</span>
-                  </div>
                 </div>
 
                 <div className="space-y-4">
@@ -3178,6 +3203,23 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                             <h3 className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Extracted Frames ({extractorFrames.length})</h3>
                             <div className="flex items-center gap-4">
                               <div className="flex border border-zinc-800 p-0.5">
+                                {[
+                                  { id: 'grid', icon: LayoutGrid },
+                                  { id: 'timeline', icon: Clock }
+                                ].map(mode => (
+                                  <button
+                                    key={mode.id}
+                                    onClick={() => setExtractorViewMode(mode.id as any)}
+                                    className={cn(
+                                      "px-3 py-1 transition-all",
+                                      extractorViewMode === mode.id ? "bg-zinc-700 text-white" : "text-zinc-600 hover:text-zinc-400"
+                                    )}
+                                  >
+                                    <mode.icon size={12} />
+                                  </button>
+                                ))}
+                              </div>
+                              <div className="flex border border-zinc-800 p-0.5">
                                 {["sm", "md", "lg"].map(size => (
                                   <button
                                     key={size}
@@ -3230,6 +3272,23 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                   Batch Send to Engine
                                 </button>
                               )}
+                              {selectedExtractorFrames.length > 0 && (
+                                <div className="flex items-center gap-2 border-l border-zinc-800 pl-4">
+                                  <input 
+                                    type="text"
+                                    value={extractorRenamePrefix}
+                                    onChange={(e) => setExtractorRenamePrefix(e.target.value)}
+                                    placeholder="Prefix..."
+                                    className="bg-black border border-zinc-800 text-white font-mono text-[8px] p-1 w-24 focus:outline-none focus:border-zinc-600"
+                                  />
+                                  <button
+                                    onClick={batchRenameFrames}
+                                    className="px-3 py-1 border border-zinc-700 text-zinc-400 font-mono text-[8px] uppercase tracking-widest hover:bg-zinc-800 hover:text-white transition-all"
+                                  >
+                                    Batch Rename
+                                  </button>
+                                </div>
+                              )}
                             </div>
                             {extractorFrames.length > 0 && (
                               <button
@@ -3250,12 +3309,57 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           </div>
                         </div>
 
-                        <div className={cn(
-                          "grid gap-4 max-h-[600px] overflow-y-auto p-2 border border-zinc-800 bg-black/30",
-                          extractorThumbnailSize === "sm" ? "grid-cols-4 sm:grid-cols-6" : 
-                          extractorThumbnailSize === "md" ? "grid-cols-2 sm:grid-cols-3" : 
-                          "grid-cols-1 sm:grid-cols-2"
-                        )}>
+                        {extractorViewMode === 'timeline' && extractorFrames.length > 0 && (
+                          <div className="space-y-4">
+                            <div className="flex items-center gap-2 px-2">
+                              <Clock size={12} className="text-zinc-600" />
+                              <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Video Timeline View</span>
+                            </div>
+                            <div className="relative h-48 border border-zinc-800 bg-black/50 overflow-x-auto overflow-y-hidden flex items-end p-4 gap-1 group/timeline">
+                            {/* Time indicators */}
+                            <div className="absolute top-0 left-0 w-full h-6 border-b border-zinc-800 flex items-center px-4">
+                              <div className="flex gap-20 font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
+                                {Array.from({ length: 10 }).map((_, i) => (
+                                  <span key={i}>{i * 10}s</span>
+                                ))}
+                              </div>
+                            </div>
+                            
+                            {extractorFrames.map((frame, i) => (
+                              <motion.div
+                                key={i}
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                onClick={() => seekToFrameTime(frame.time)}
+                                className={cn(
+                                  "relative flex-shrink-0 cursor-pointer transition-all border border-zinc-800 hover:border-white group/frame",
+                                  selectedExtractorFrames.includes(i) ? "border-cyan-500 ring-1 ring-cyan-500" : ""
+                                )}
+                                style={{ 
+                                  width: extractorThumbnailSize === 'sm' ? '60px' : extractorThumbnailSize === 'md' ? '120px' : '240px',
+                                  height: extractorThumbnailSize === 'sm' ? '34px' : extractorThumbnailSize === 'md' ? '68px' : '135px'
+                                }}
+                              >
+                                <img src={frame.url} className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/frame:opacity-100 transition-opacity flex items-center justify-center">
+                                  <Play size={16} className="text-white" />
+                                </div>
+                                <div className="absolute -top-6 left-0 font-mono text-[8px] text-zinc-600 opacity-0 group-hover/frame:opacity-100 transition-opacity">
+                                  {frame.time?.toFixed(1)}s
+                                </div>
+                              </motion.div>
+                            ))}
+                          </div>
+                        </div>
+                        )}
+
+                        {extractorViewMode === 'grid' && (
+                          <div className={cn(
+                            "grid gap-4 max-h-[600px] overflow-y-auto p-2 border border-zinc-800 bg-black/30",
+                            extractorThumbnailSize === "sm" ? "grid-cols-4 sm:grid-cols-6" : 
+                            extractorThumbnailSize === "md" ? "grid-cols-2 sm:grid-cols-3" : 
+                            "grid-cols-1 sm:grid-cols-2"
+                          )}>
                           {extractorFrames.length === 0 ? (
                             <div className="col-span-full py-20 flex flex-col items-center justify-center text-zinc-800 gap-4">
                               <FileImage size={48} />
@@ -3279,13 +3383,17 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                   );
                                 }}
                               >
-                                <img src={frame} className="w-full h-full object-cover" />
+                                <img src={frame.url} className="w-full h-full object-cover" />
                                 
-                                {extractorBackgrounds[i] && (
+                                {frame.backgroundUrl && (
                                   <div className="absolute inset-0 z-10">
-                                    <img src={extractorBackgrounds[i]} className="w-full h-full object-cover opacity-50 mix-blend-overlay" />
+                                    <img src={frame.backgroundUrl} className="w-full h-full object-cover opacity-50 mix-blend-overlay" />
                                   </div>
                                 )}
+
+                                <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/80 font-mono text-[8px] text-white border border-zinc-800 z-20">
+                                  {frame.name || `FRAME ${i + 1}`}
+                                </div>
 
                                 {/* Selection Checkbox */}
                                 <div className={cn(
@@ -3300,7 +3408,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                     <button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        if (extractorBackgrounds[i]) {
+                                        if (frame.backgroundUrl) {
                                           setRefiningBackgroundIndex(i);
                                           setBackgroundRefinementPrompt("");
                                         } else {
@@ -3315,7 +3423,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                       ) : (
                                         <>
                                           <Sparkles size={10} />
-                                          {extractorBackgrounds[i] ? "Refine BG" : "AI BG"}
+                                          {frame.backgroundUrl ? "Refine BG" : "AI BG"}
                                         </>
                                       )}
                                     </button>
@@ -3354,13 +3462,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                     Delete
                                   </button>
                                 </div>
-                                <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/80 font-mono text-[8px] text-white border border-zinc-800">
-                                  FRAME {i + 1}
-                                </div>
                               </motion.div>
                             ))
                           )}
                         </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -3376,10 +3482,10 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     exit={{ opacity: 0, scale: 0.95 }}
                     className="fixed bottom-10 right-10 w-96 aspect-video z-50 pointer-events-none border-4 border-zinc-800 shadow-2xl overflow-hidden bg-black"
                   >
-                    <img src={hoveredFrame} className="w-full h-full object-contain" />
-                    {extractorBackgrounds[extractorFrames.indexOf(hoveredFrame)] && (
+                    <img src={hoveredFrame.url} className="w-full h-full object-contain" />
+                    {hoveredFrame.backgroundUrl && (
                       <div className="absolute inset-0">
-                        <img src={extractorBackgrounds[extractorFrames.indexOf(hoveredFrame)]} className="w-full h-full object-cover opacity-50 mix-blend-overlay" />
+                        <img src={hoveredFrame.backgroundUrl} className="w-full h-full object-cover opacity-50 mix-blend-overlay" />
                       </div>
                     )}
                     <div className="absolute top-0 left-0 w-full p-2 bg-gradient-to-b from-black/80 to-transparent">
@@ -3410,13 +3516,13 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         <div className="space-y-2">
                           <p className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Original Frame</p>
                           <div className="aspect-video bg-black border border-zinc-800 overflow-hidden">
-                            <img src={extractorFrames[refiningBackgroundIndex]} className="w-full h-full object-cover" />
+                            <img src={extractorFrames[refiningBackgroundIndex].url} className="w-full h-full object-cover" />
                           </div>
                         </div>
                         <div className="space-y-2">
                           <p className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Current Background</p>
                           <div className="aspect-video bg-black border border-zinc-800 overflow-hidden">
-                            <img src={extractorBackgrounds[refiningBackgroundIndex]} className="w-full h-full object-cover" />
+                            <img src={extractorFrames[refiningBackgroundIndex].backgroundUrl} className="w-full h-full object-cover" />
                           </div>
                         </div>
                       </div>
