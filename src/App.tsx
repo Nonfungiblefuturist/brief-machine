@@ -384,6 +384,78 @@ interface PromptCraftHistoryItem {
   shot: PromptCraftShot;
 }
 
+const PromptCraftHistoryComponent = ({ 
+  history, 
+  onSelect, 
+  onDelete 
+}: { 
+  history: PromptCraftHistoryItem[], 
+  onSelect: (shot: PromptCraftShot) => void,
+  onDelete: (id: string) => void
+}) => {
+  if (history.length === 0) {
+    return (
+      <div className="py-12 flex flex-col items-center justify-center text-zinc-800 gap-4">
+        <History size={48} />
+        <p className="font-display italic text-xl">No history yet</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {history.map(item => (
+        <div 
+          key={item.id}
+          className="bg-zinc-900/30 border border-zinc-800 hover:border-zinc-600 transition-all rounded-lg overflow-hidden group"
+        >
+          <div className="flex gap-4 p-4">
+            <div 
+              className="w-24 aspect-video bg-black border border-zinc-800 flex-shrink-0 cursor-pointer overflow-hidden"
+              onClick={() => onSelect(item.shot)}
+            >
+              {item.shot.imageUrl ? (
+                <img src={item.shot.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  <Sparkles size={16} className="text-zinc-800" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-w-0 space-y-2">
+              <div className="flex justify-between items-start">
+                <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
+                  {new Date(item.timestamp).toLocaleString()}
+                </span>
+                <button 
+                  onClick={() => onDelete(item.id)}
+                  className="text-zinc-700 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                >
+                  <Trash2 size={12} />
+                </button>
+              </div>
+              <p className="text-[11px] text-zinc-300 line-clamp-2 font-medium leading-relaxed">
+                {item.shot.subject}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {item.shot.camera && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] text-zinc-500 font-mono uppercase tracking-widest rounded">{item.shot.camera}</span>}
+                {item.shot.lighting && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] text-zinc-500 font-mono uppercase tracking-widest rounded">{item.shot.lighting}</span>}
+                {item.shot.style && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] text-zinc-500 font-mono uppercase tracking-widest rounded">{item.shot.style}</span>}
+              </div>
+            </div>
+          </div>
+          <button 
+            onClick={() => onSelect(item.shot)}
+            className="w-full py-2 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-500 hover:text-white font-mono text-[9px] uppercase tracking-widest transition-all border-t border-zinc-800"
+          >
+            Restore Shot
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 enum OperationType {
   CREATE = 'create',
   UPDATE = 'update',
@@ -558,6 +630,7 @@ export default function App() {
   const [isSimplifying, setIsSimplifying] = useState(false);
   const [expandedLabSections, setExpandedLabSections] = useState<string[]>(["studio"]);
   const [expandedPresetCategories, setExpandedPresetCategories] = useState<string[]>([]);
+  const [hoveredStoryboardFrame, setHoveredStoryboardFrame] = useState<number | null>(null);
   const [promptCraftGallery, setPromptCraftGallery] = useState<string[]>([]);
   const [galleryGridCols, setGalleryGridCols] = useState<1 | 2 | 4>(2);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -3633,35 +3706,16 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                               exit={{ height: 0, opacity: 0 }}
                               className="overflow-hidden bg-zinc-950/30"
                             >
-                              <div className="p-4 space-y-3">
-                                {promptCraftHistory.length === 0 ? (
-                                  <p className="text-[10px] text-zinc-600 italic text-center py-4">No history yet</p>
-                                ) : (
-                                  promptCraftHistory.map(item => (
-                                    <button 
-                                      key={item.id}
-                                      onClick={() => setPromptCraftShot(item.shot)}
-                                      className="w-full text-left p-3 bg-zinc-900/30 border border-zinc-800 hover:border-zinc-600 transition-all rounded group"
-                                    >
-                                      <div className="flex justify-between items-center mb-1">
-                                        <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
-                                          {new Date(item.timestamp).toLocaleTimeString()}
-                                        </span>
-                                        <Trash2 
-                                          size={10} 
-                                          className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-red-500" 
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            const updated = promptCraftHistory.filter(h => h.id !== item.id);
-                                            setPromptCraftHistory(updated);
-                                            localStorage.setItem("promptlab_history", JSON.stringify(updated));
-                                          }}
-                                        />
-                                      </div>
-                                      <p className="text-[10px] text-zinc-400 line-clamp-2">{item.shot.subject}</p>
-                                    </button>
-                                  ))
-                                )}
+                              <div className="p-4">
+                                <PromptCraftHistoryComponent 
+                                  history={promptCraftHistory}
+                                  onSelect={setPromptCraftShot}
+                                  onDelete={(id) => {
+                                    const updated = promptCraftHistory.filter(h => h.id !== id);
+                                    setPromptCraftHistory(updated);
+                                    localStorage.setItem("promptlab_history", JSON.stringify(updated));
+                                  }}
+                                />
                               </div>
                             </motion.div>
                           )}
@@ -4152,6 +4206,54 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       </button>
                     </div>
                   </div>
+
+                  {/* Sequence Bar */}
+                  <div className="flex gap-2 overflow-x-auto pb-4 border-b border-zinc-800 mb-8 scrollbar-hide">
+                    {storyboarderFrames.map((frame, i) => (
+                      <div 
+                        key={i}
+                        className="relative flex-shrink-0 w-24 aspect-video bg-zinc-900 border border-zinc-800 hover:border-white transition-all cursor-pointer group"
+                        onMouseEnter={() => setHoveredStoryboardFrame(i)}
+                        onMouseLeave={() => setHoveredStoryboardFrame(null)}
+                        onClick={() => {
+                          const element = document.getElementById(`frame-${i}`);
+                          if (element) element.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                      >
+                        {frame.visual_url ? (
+                          <img src={frame.visual_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[8px] text-zinc-700 font-mono">
+                            0{i+1}
+                          </div>
+                        )}
+                        
+                        {/* Visual Preview on Hover */}
+                        <AnimatePresence>
+                          {hoveredStoryboardFrame === i && (
+                            <motion.div 
+                              initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 aspect-video bg-black border border-zinc-700 shadow-2xl z-50 pointer-events-none"
+                            >
+                              {frame.visual_url ? (
+                                <img src={frame.visual_url} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-zinc-900">
+                                  <Sparkles size={24} className="text-zinc-800" />
+                                  <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">No Image</span>
+                                </div>
+                              )}
+                              <div className="absolute bottom-2 left-2 right-2 bg-black/80 p-2 border border-zinc-800">
+                                <p className="text-[9px] text-white line-clamp-2 italic">{frame.frame_description}</p>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    ))}
+                  </div>
                   
                   <div ref={storyboardRef} className="space-y-8 p-12 bg-[#000000] border border-[#27272a]">
                     <div className="border-b border-[#27272a] pb-8 mb-8">
@@ -4171,6 +4273,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       {storyboarderFrames.map((frame, i) => (
                       <motion.div 
                         key={i}
+                        id={`frame-${i}`}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: i * 0.1 }}
