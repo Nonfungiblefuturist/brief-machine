@@ -563,7 +563,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "promptlab">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "briefMachineLab">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
@@ -937,7 +937,7 @@ export default function App() {
     };
     const updatedHistory = [newItem, ...briefMachineHistory].slice(0, 50);
     setBriefMachineHistory(updatedHistory);
-    localStorage.setItem("promptlab_history", JSON.stringify(updatedHistory));
+    localStorage.setItem("briefMachineLab_history", JSON.stringify(updatedHistory));
   };
 
   const copyFullPrompt = () => {
@@ -972,13 +972,13 @@ export default function App() {
     };
     const updated = [...briefMachineCharacters, newChar];
     setBriefMachineCharacters(updated);
-    localStorage.setItem("promptlab_characters", JSON.stringify(updated));
+    localStorage.setItem("briefMachineLab_characters", JSON.stringify(updated));
   };
 
   const deleteCharacter = (id: string) => {
     const updated = briefMachineCharacters.filter(c => c.id !== id);
     setBriefMachineCharacters(updated);
-    localStorage.setItem("promptlab_characters", JSON.stringify(updated));
+    localStorage.setItem("briefMachineLab_characters", JSON.stringify(updated));
   };
 
   const insertCharacter = (char: BriefMachineCharacter) => {
@@ -989,19 +989,19 @@ export default function App() {
   };
 
   useEffect(() => {
-    const savedHistory = localStorage.getItem("promptlab_history");
+    const savedHistory = localStorage.getItem("briefMachineLab_history");
     if (savedHistory) setBriefMachineHistory(JSON.parse(savedHistory));
     
-    const savedChars = localStorage.getItem("promptlab_characters");
+    const savedChars = localStorage.getItem("briefMachineLab_characters");
     if (savedChars) setBriefMachineCharacters(JSON.parse(savedChars));
 
     const savedBriefs = localStorage.getItem("brief_history");
     if (savedBriefs) setBriefHistory(JSON.parse(savedBriefs));
 
-    const firstVisit = !localStorage.getItem("promptlab_visited");
+    const firstVisit = !localStorage.getItem("briefMachineLab_visited");
     if (firstVisit) {
       setShowWelcomeModal(true);
-      localStorage.setItem("promptlab_visited", "true");
+      localStorage.setItem("briefMachineLab_visited", "true");
     }
   }, []);
 
@@ -1026,7 +1026,7 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (view !== "promptlab") return;
+      if (view !== "briefMachineLab") return;
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         copyFullPrompt();
       }
@@ -1126,7 +1126,7 @@ export default function App() {
       setView("storyboarder");
     } else if (project.prompts && project.prompts.length > 0) {
       setBriefMachineHistory(project.prompts);
-      setView("promptlab");
+      setView("briefMachineLab");
     } else if (project.extractedFrames && project.extractedFrames.length > 0) {
       setExtractorFrames(project.extractedFrames);
       setView("extractor");
@@ -2628,11 +2628,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 id: "engine_group", 
                 label: "Engine", 
                 icon: Zap, 
-                active: view === "input" || view === "results" || view === "prompt" || view === "promptlab",
+                active: view === "input" || view === "results" || view === "prompt" || view === "briefMachineLab",
                 subItems: [
                   { id: "input", label: "Concepts" },
                   { id: "prompt", label: "DNA" },
-                  { id: "promptlab", label: "Lab" }
+                  { id: "briefMachineLab", label: "Brief Machine Lab" }
                 ]
               },
               { 
@@ -3494,8 +3494,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             )}
           </AnimatePresence>
 
-          {/* PROMPT LAB VIEW */}
-          {view === "promptlab" && (
+          {/* BRIEF MACHINE LAB VIEW */}
+          {view === "briefMachineLab" && (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -3608,16 +3608,16 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                             onChange={(e) => {
                                               const updated = briefMachineCharacters.map(c => c.id === char.id ? { ...c, name: e.target.value } : c);
                                               setBriefMachineCharacters(updated);
-                                              localStorage.setItem("promptlab_characters", JSON.stringify(updated));
+                                              localStorage.setItem("briefMachineLab_characters", JSON.stringify(updated));
                                             }}
                                             className="bg-transparent border-none p-0 text-xs font-bold text-white focus:ring-0 w-full"
                                           />
                                           <textarea 
                                             value={char.description}
                                             onChange={(e) => {
-                                              const updated = briefMachineCharacters.map(c => c.id === char.id ? { ...c, description: e.target.value } : c);
+                                              const updated = briefMachineCharacters.map(c => c.id === char.id ? { ...c, name: e.target.value } : c);
                                               setBriefMachineCharacters(updated);
-                                              localStorage.setItem("promptlab_characters", JSON.stringify(updated));
+                                              localStorage.setItem("briefMachineLab_characters", JSON.stringify(updated));
                                             }}
                                             placeholder="Role/Description..."
                                             className="bg-transparent border-none p-0 text-[10px] text-zinc-500 focus:ring-0 w-full resize-none h-4"
@@ -3648,7 +3648,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                                 wardrobe: wardrobe ?? c.wardrobe
                                               } : c);
                                               setBriefMachineCharacters(updated);
-                                              localStorage.setItem("promptlab_characters", JSON.stringify(updated));
+                                              localStorage.setItem("briefMachineLab_characters", JSON.stringify(updated));
                                             }
                                           }}
                                           className="py-2 bg-zinc-900 text-zinc-500 font-mono text-[9px] uppercase tracking-widest hover:text-white transition-all border border-zinc-800"
@@ -3862,7 +3862,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                   onDelete={(id) => {
                                     const updated = briefMachineHistory.filter(h => h.id !== id);
                                     setBriefMachineHistory(updated);
-                                    localStorage.setItem("promptlab_history", JSON.stringify(updated));
+                                    localStorage.setItem("briefMachineLab_history", JSON.stringify(updated));
                                   }}
                                 />
                               </div>
@@ -3989,7 +3989,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         )}
                       >
                         {isSaving ? <RefreshCcw size={14} className="animate-spin" /> : <Save size={14} />}
-                        Save Lab
+                        Save Brief Machine Lab
                       </button>
                     )}
                     <button 
