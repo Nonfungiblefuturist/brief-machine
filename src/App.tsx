@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-import { GoogleGenAI, Type, ThinkingLevel, Modality, GenerateContentResponse } from "@google/genai";
+import React, { useState, useCallback, useRef, useEffect } from "react";
+import { Type, ThinkingLevel, Modality, GenerateContentResponse } from "@google/genai";
 
 declare global {
   interface Window {
@@ -25,6 +25,7 @@ import {
   Copy, 
   Check,
   ChevronRight,
+  ChevronDown,
   Sparkles,
   Search,
   Code,
@@ -434,7 +435,35 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 };
 
+import { geminiService } from "./services/geminiService";
+
 // --- Components ---
+
+const LazyImage = ({ src, alt, className, placeholder }: { src?: string; alt: string; className?: string; placeholder?: React.ReactNode }) => {
+  const [isLoaded, setIsLoaded] = React.useState(false);
+  const [error, setError] = React.useState(false);
+
+  if (!src || error) return <div className={cn("bg-zinc-900 flex items-center justify-center", className)}>{placeholder || <FileImage size={24} className="text-zinc-700" />}</div>;
+
+  return (
+    <div className={cn("relative overflow-hidden bg-zinc-900", className)}>
+      {!isLoaded && (
+        <div className="absolute inset-0 flex items-center justify-center animate-pulse bg-zinc-900/50">
+          {placeholder || <RefreshCcw size={24} className="text-zinc-700 animate-spin" />}
+        </div>
+      )}
+      <img 
+        src={src} 
+        alt={alt} 
+        loading="lazy"
+        className={cn("w-full h-full object-cover transition-opacity duration-500", isLoaded ? "opacity-100" : "opacity-0")}
+        onLoad={() => setIsLoaded(true)}
+        onError={() => setError(true)}
+        referrerPolicy="no-referrer"
+      />
+    </div>
+  );
+};
 
 const DetailBlock = ({ label, value, className }: { label: string; value: string; className?: string }) => (
   <div className={cn("space-y-1", className)}>
@@ -469,11 +498,13 @@ export default function App() {
   const [results, setResults] = useState<Results | null>(null);
   const [trends, setTrends] = useState<Trend[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [loadingMsg, setLoadingMsg] = useState("");
   const [expandedConcept, setExpandedConcept] = useState<number | null>(0);
   const [copied, setCopied] = useState(false);
   const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
   const [pastRatings, setPastRatings] = useState<{ concept: string; rating: number }[]>([]);
+  const [isGeneratingConcepts, setIsGeneratingConcepts] = useState(false);
   const [isGeneratingVariations, setIsGeneratingVariations] = useState<number | null>(null);
   const [filterRating, setFilterRating] = useState<number>(0);
   const [storyboarderInput, setStoryboarderInput] = useState("");
@@ -525,6 +556,8 @@ export default function App() {
   const [smartEditInstruction, setSmartEditInstruction] = useState("");
   const [isExpanding, setIsExpanding] = useState(false);
   const [isSimplifying, setIsSimplifying] = useState(false);
+  const [expandedLabSections, setExpandedLabSections] = useState<string[]>(["studio"]);
+  const [expandedPresetCategories, setExpandedPresetCategories] = useState<string[]>([]);
   const [promptCraftGallery, setPromptCraftGallery] = useState<string[]>([]);
   const [galleryGridCols, setGalleryGridCols] = useState<1 | 2 | 4>(2);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -644,8 +677,7 @@ export default function App() {
     if (!promptCraftRawInput.trim()) return;
     setIsBeautifying(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: `You are a professional AI prompt engineer for cinematic image and video generation. Take this unstructured prompt and reorganize it into clean, well-written sections. If a section has no relevant content, leave it empty.
         
@@ -682,8 +714,7 @@ export default function App() {
     if (!instruction.trim()) return;
     setIsSmartEditing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: `You are an expert AI prompt editor. Modify the provided structured prompt according to the user's instruction. Keep all sections intact. Only change what the instruction asks for.
         
@@ -727,8 +758,7 @@ export default function App() {
   const expandPrompt = async () => {
     setIsExpanding(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: `Add more cinematic detail and richness to each section of this prompt while preserving the original creative intent. Make it more vivid and specific.
         
@@ -769,8 +799,7 @@ export default function App() {
   const simplifyPrompt = async () => {
     setIsSimplifying(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: `Strip this prompt down to only its most essential elements. Remove unnecessary detail. Make it clean and minimal.
         
@@ -1083,11 +1112,10 @@ export default function App() {
   const generateConcepts = async () => {
     if (!briefInput.trim()) return;
     setError(null);
-    setView("loading");
+    setIsGeneratingConcepts(true);
+    setLoading(true);
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
       const pastPreferences = pastRatings
         .filter(r => r.rating >= 4)
         .map(r => r.concept)
@@ -1099,7 +1127,7 @@ export default function App() {
            ${attachedExtractorFrames.map((f, i) => `Frame ${i+1}: ${f.name || 'Unnamed'} at ${f.time.toFixed(2)}s`).join('\n')}`
         : "";
 
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: `USER BRIEF / INPUT: ${briefInput}${visualContext}
 TARGET VIDEO LENGTH: ${videoLength}
@@ -1271,6 +1299,9 @@ Think D&AD. Think Cannes.`,
       console.error(e);
       setError("Generation failed. The creative director is having a breakdown. Try again.");
       setView("input");
+    } finally {
+      setIsGeneratingConcepts(false);
+      setLoading(false);
     }
   };
 
@@ -1454,7 +1485,6 @@ Think D&AD. Think Cannes.`,
     
     setIsGeneratingExtractorBackground(index);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const prompt = refinement 
         ? `Refine the AI-generated background for this video frame: ${refinement}. 
            Maintain the cinematic, high-end advertising style. 
@@ -1463,7 +1493,7 @@ Think D&AD. Think Cannes.`,
            Style: High-end advertising, abstract but evocative. 
            Focus on enhancing the mood and environment while keeping the original frame's essence.`;
 
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: {
           parts: [
@@ -1582,7 +1612,6 @@ Think D&AD. Think Cannes.`,
     
     setIsGeneratingIndividualFrame(index);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const prompt = feedback 
         ? `Refine this storyboard frame: ${frame.frame_description}. 
            Camera Angle: ${frame.camera_angle || 'N/A'}. 
@@ -1596,7 +1625,7 @@ Think D&AD. Think Cannes.`,
            Atmosphere: ${frame.atmosphere || 'N/A'}. 
            Cinematic, professional storyboard sketch style.`;
 
-      const imgResponse = await ai.models.generateContent({
+      const imgResponse = await geminiService.generateContent({
         model: "gemini-2.5-flash-image",
         contents: prompt,
         config: {
@@ -1674,8 +1703,6 @@ Think D&AD. Think Cannes.`,
     setError(null);
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      
       const contents: any[] = [
         `TASK: Generate a storyboard based on the following input. 
         Determine the appropriate number of shots (between 4 and 12) to tell the story effectively.
@@ -1700,7 +1727,7 @@ Think D&AD. Think Cannes.`,
         });
       }
 
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: { parts: contents.map(c => typeof c === 'string' ? { text: c } : c) },
         config: {
@@ -1744,7 +1771,7 @@ Think D&AD. Think Cannes.`,
         const frame = frames[i];
         setIsGeneratingIndividualFrame(i);
         try {
-          const imgResponse = await ai.models.generateContent({
+          const imgResponse = await geminiService.generateContent({
             model: "gemini-2.5-flash-image",
             contents: `Storyboard frame: ${frame.frame_description}. Cinematic, professional storyboard sketch style.`,
             config: {
@@ -1794,8 +1821,7 @@ Think D&AD. Think Cannes.`,
     setLoadingMsg("Scanning the zeitgeist...");
     setError(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: `Give me 6 ${loadMore ? 'additional ' : ''}potent cultural tensions shaping advertising RIGHT NOW in 2025-2026. ${loadMore ? 'Ensure these are different from common mainstream trends.' : ''}`,
         config: {
@@ -1889,8 +1915,7 @@ Think D&AD. Think Cannes.`,
     const originalConcept = results.concepts[index];
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: REFINE_PROMPT
           .replace("{original_concept}", JSON.stringify(originalConcept, null, 2))
@@ -1960,12 +1985,11 @@ Think D&AD. Think Cannes.`,
     if (!concept.storyboard) return;
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
       const updatedStoryboard = [...concept.storyboard];
 
       for (let i = 0; i < updatedStoryboard.length; i++) {
         const frame = updatedStoryboard[i];
-        const response = await ai.models.generateContent({
+        const response = await geminiService.generateContent({
           model: "gemini-2.5-flash-image",
           contents: {
             parts: [
@@ -2006,8 +2030,7 @@ Think D&AD. Think Cannes.`,
     setError(null);
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: {
           parts: [{ text: `Atmospheric background for: ${concept.ai_visual_prompt}. Style: Cinematic, high-end advertising, abstract but evocative.` }],
@@ -2262,8 +2285,7 @@ Think D&AD. Think Cannes.`,
     const concept = results.concepts[index];
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: "gemini-2.5-flash-image",
         contents: {
           parts: [
@@ -2326,8 +2348,7 @@ Think D&AD. Think Cannes.`,
     setError(null);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      const response = await ai.models.generateContent({
+      const response = await geminiService.generateContent({
         model: "gemini-3-flash-preview",
         contents: `CORE CONCEPT: ${concept.name}
 IDEA: ${concept.idea}
@@ -2378,8 +2399,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
     const concept = results.concepts[index];
     
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      let operation = await ai.models.generateVideos({
+      let operation = await geminiService.generateVideos({
         model: 'veo-3.1-lite-generate-preview',
         prompt: `A high-end, award-winning advertising video snippet for the concept "${concept.name}". 
         Execution: ${concept.execution}. 
@@ -2394,7 +2414,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
 
       while (!operation.done) {
         await new Promise(resolve => setTimeout(resolve, 10000));
-        operation = await ai.operations.getVideosOperation({ operation: operation });
+        operation = await geminiService.getVideosOperation({ operation: operation });
       }
 
       const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
@@ -2453,7 +2473,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
     <div className="min-h-screen relative overflow-x-hidden selection:bg-white selection:text-black">
       <div className="grain-overlay" />
       
-      <div className="relative z-10 w-full px-6 md:px-12 py-12 md:py-20">
+      <div className="relative z-10 w-full px-6 md:px-12 py-12 md:py-20 max-w-[1800px] mx-auto">
         {/* Header */}
         <header className="mb-16 border-b border-zinc-800 pb-10">
           <div className="flex justify-between items-start mb-10">
@@ -2600,7 +2620,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
         </AnimatePresence>
 
         {/* Views */}
-        <main>
+        <main className="grid grid-cols-1 gap-12">
           {/* INPUT VIEW */}
           {view === "input" && (
             <motion.div 
@@ -3398,149 +3418,255 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     exit={{ x: -300 }}
                     className="w-[300px] border-r border-zinc-800 flex flex-col bg-black"
                   >
-                    <div className="flex border-b border-zinc-800">
-                      <button 
-                        onClick={() => setPromptCraftActiveTab("presets")}
-                        className={cn(
-                          "flex-1 py-4 font-mono text-[10px] uppercase tracking-widest border-b-2 transition-all",
-                          promptCraftActiveTab === "presets" ? "border-[#c87941] text-[#c87941]" : "border-transparent text-zinc-500 hover:text-zinc-300"
-                        )}
-                      >
-                        Presets
-                      </button>
-                      <button 
-                        onClick={() => setPromptCraftActiveTab("characters")}
-                        className={cn(
-                          "flex-1 py-4 font-mono text-[10px] uppercase tracking-widest border-b-2 transition-all",
-                          promptCraftActiveTab === "characters" ? "border-[#c87941] text-[#c87941]" : "border-transparent text-zinc-500 hover:text-zinc-300"
-                        )}
-                      >
-                        Studio
-                      </button>
-                      <button 
-                        onClick={() => setPromptCraftActiveTab("history")}
-                        className={cn(
-                          "flex-1 py-4 font-mono text-[10px] uppercase tracking-widest border-b-2 transition-all",
-                          promptCraftActiveTab === "history" ? "border-[#c87941] text-[#c87941]" : "border-transparent text-zinc-500 hover:text-zinc-300"
-                        )}
-                      >
-                        History
-                      </button>
-                    </div>
-
-                    <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
-                      {promptCraftActiveTab === "presets" && (
-                        <div className="space-y-4">
-                          {Object.entries(PROMPTCRAFT_PRESETS).map(([category, items]) => (
-                            <details key={category} className="group" open>
-                              <summary className="flex items-center justify-between cursor-pointer py-2 border-b border-zinc-900">
-                                <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">{category}</span>
-                                <ChevronRight size={12} className="text-zinc-600 group-open:rotate-90 transition-transform" />
-                              </summary>
-                              <div className="grid grid-cols-1 gap-1 mt-2">
-                                {items.map(item => (
-                                  <button 
-                                    key={item}
-                                    onClick={() => {
-                                      const key = category === "cameras" ? "camera" : 
-                                                  category === "lenses" ? "camera" :
-                                                  category === "filmStocks" ? "camera" :
-                                                  category.slice(0, -1) as keyof PromptCraftShot;
-                                      
-                                      setPromptCraftShot(prev => {
-                                        let val = prev[key as keyof PromptCraftShot] || "";
-                                        if (category === "cameras" || category === "lenses" || category === "filmStocks") {
-                                          val = val ? `${val}, ${item}` : item;
-                                          return { ...prev, camera: val };
+                    <div className="flex-1 overflow-y-auto scrollbar-hide">
+                      {/* STUDIO SECTION */}
+                      <div className="border-b border-zinc-900">
+                        <button 
+                          onClick={() => setExpandedLabSections(prev => prev.includes("studio") ? prev.filter(s => s !== "studio") : [...prev, "studio"])}
+                          className="w-full flex items-center justify-between p-4 font-mono text-[10px] uppercase tracking-widest text-[#c87941] hover:bg-zinc-900/50 transition-all"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Layers size={12} />
+                            Studio
+                          </div>
+                          {expandedLabSections.includes("studio") ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        </button>
+                        
+                        <AnimatePresence>
+                          {expandedLabSections.includes("studio") && (
+                            <motion.div 
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden bg-zinc-950/30"
+                            >
+                              <div className="p-4 space-y-6">
+                                <div className="space-y-4">
+                                  <div className="p-4 bg-zinc-900/30 border border-zinc-800 rounded-lg space-y-4">
+                                    <h4 className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest">Quick Create</h4>
+                                    <input 
+                                      type="text"
+                                      placeholder="Character Name..."
+                                      className="w-full bg-black border border-zinc-800 p-3 text-xs text-white focus:border-[#c87941] outline-none"
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          const name = e.currentTarget.value;
+                                          if (name) {
+                                            addCharacter({ name, description: "", wardrobe: "", personality: "", notes: "" });
+                                            e.currentTarget.value = "";
+                                          }
                                         }
-                                        return { ...prev, [key]: item };
-                                      });
-                                    }}
-                                    className="text-left py-2 px-3 text-[11px] text-zinc-500 hover:bg-zinc-900 hover:text-white transition-all rounded"
-                                  >
-                                    {item}
-                                  </button>
+                                      }}
+                                    />
+                                    <p className="text-[9px] text-zinc-600 italic">Press Enter to add to studio</p>
+                                  </div>
+                                </div>
+                                
+                                <div className="space-y-4">
+                                  {promptCraftCharacters.map(char => (
+                                    <div key={char.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-lg space-y-3 group hover:border-zinc-700 transition-all">
+                                      <div className="flex items-center gap-3">
+                                        <div 
+                                          className="w-8 h-8 rounded-full flex items-center justify-center font-mono text-[10px] text-white shadow-lg"
+                                          style={{ backgroundColor: char.color }}
+                                        >
+                                          {char.initials}
+                                        </div>
+                                        <div className="flex-1">
+                                          <input 
+                                            type="text"
+                                            value={char.name}
+                                            onChange={(e) => {
+                                              const updated = promptCraftCharacters.map(c => c.id === char.id ? { ...c, name: e.target.value } : c);
+                                              setPromptCraftCharacters(updated);
+                                              localStorage.setItem("promptlab_characters", JSON.stringify(updated));
+                                            }}
+                                            className="bg-transparent border-none p-0 text-xs font-bold text-white focus:ring-0 w-full"
+                                          />
+                                          <textarea 
+                                            value={char.description}
+                                            onChange={(e) => {
+                                              const updated = promptCraftCharacters.map(c => c.id === char.id ? { ...c, description: e.target.value } : c);
+                                              setPromptCraftCharacters(updated);
+                                              localStorage.setItem("promptlab_characters", JSON.stringify(updated));
+                                            }}
+                                            placeholder="Role/Description..."
+                                            className="bg-transparent border-none p-0 text-[10px] text-zinc-500 focus:ring-0 w-full resize-none h-4"
+                                          />
+                                        </div>
+                                        <button 
+                                          onClick={() => deleteCharacter(char.id)}
+                                          className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-500 transition-all p-1"
+                                        >
+                                          <Trash2 size={14} />
+                                        </button>
+                                      </div>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <button 
+                                          onClick={() => insertCharacter(char)}
+                                          className="py-2 bg-zinc-800 text-zinc-300 font-mono text-[9px] uppercase tracking-widest hover:bg-zinc-700 transition-all border border-zinc-700"
+                                        >
+                                          Insert
+                                        </button>
+                                        <button 
+                                          onClick={() => {
+                                            const desc = prompt("Update description?", char.description);
+                                            const wardrobe = prompt("Update wardrobe?", char.wardrobe);
+                                            if (desc !== null || wardrobe !== null) {
+                                              const updated = promptCraftCharacters.map(c => c.id === char.id ? { 
+                                                ...c, 
+                                                description: desc ?? c.description,
+                                                wardrobe: wardrobe ?? c.wardrobe
+                                              } : c);
+                                              setPromptCraftCharacters(updated);
+                                              localStorage.setItem("promptlab_characters", JSON.stringify(updated));
+                                            }
+                                          }}
+                                          className="py-2 bg-zinc-900 text-zinc-500 font-mono text-[9px] uppercase tracking-widest hover:text-white transition-all border border-zinc-800"
+                                        >
+                                          Edit
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      {/* PRESETS SECTION */}
+                      <div className="border-b border-zinc-900">
+                        <button 
+                          onClick={() => setExpandedLabSections(prev => prev.includes("presets") ? prev.filter(s => s !== "presets") : [...prev, "presets"])}
+                          className="w-full flex items-center justify-between p-4 font-mono text-[10px] uppercase tracking-widest text-[#c87941] hover:bg-zinc-900/50 transition-all"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Sparkles size={12} />
+                            Presets
+                          </div>
+                          {expandedLabSections.includes("presets") ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        </button>
+
+                        <AnimatePresence>
+                          {expandedLabSections.includes("presets") && (
+                            <motion.div 
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden bg-zinc-950/30"
+                            >
+                              <div className="p-4 space-y-2">
+                                {Object.entries(PROMPTCRAFT_PRESETS).map(([category, items]) => (
+                                  <div key={category} className="border border-zinc-900 rounded overflow-hidden">
+                                    <button 
+                                      onClick={() => setExpandedPresetCategories(prev => prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category])}
+                                      className="w-full flex items-center justify-between p-2 bg-zinc-900/50 hover:bg-zinc-900 transition-all"
+                                    >
+                                      <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-zinc-500">{category}</span>
+                                      {expandedPresetCategories.includes(category) ? <ChevronDown size={10} className="text-zinc-600" /> : <ChevronRight size={10} className="text-zinc-600" />}
+                                    </button>
+                                    
+                                    <AnimatePresence>
+                                      {expandedPresetCategories.includes(category) && (
+                                        <motion.div 
+                                          initial={{ height: 0, opacity: 0 }}
+                                          animate={{ height: "auto", opacity: 1 }}
+                                          exit={{ height: 0, opacity: 0 }}
+                                          className="overflow-hidden"
+                                        >
+                                          <div className="p-2 grid grid-cols-1 gap-1">
+                                            {items.map(item => (
+                                              <button 
+                                                key={item}
+                                                onClick={() => {
+                                                  const key = category === "cameras" ? "camera" : 
+                                                              category === "lenses" ? "camera" :
+                                                              category === "filmStocks" ? "camera" :
+                                                              category.slice(0, -1) as keyof PromptCraftShot;
+                                                  
+                                                  setPromptCraftShot(prev => {
+                                                    let val = prev[key as keyof PromptCraftShot] || "";
+                                                    if (category === "cameras" || category === "lenses" || category === "filmStocks") {
+                                                      val = val ? `${val}, ${item}` : item;
+                                                      return { ...prev, camera: val };
+                                                    }
+                                                    return { ...prev, [key]: item };
+                                                  });
+                                                }}
+                                                className="text-left py-2 px-3 text-[11px] text-zinc-500 hover:bg-zinc-900 hover:text-white transition-all rounded border border-transparent hover:border-zinc-800"
+                                              >
+                                                {item}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
+                                  </div>
                                 ))}
                               </div>
-                            </details>
-                          ))}
-                        </div>
-                      )}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
 
-                      {promptCraftActiveTab === "characters" && (
-                        <div className="space-y-6">
-                          <button 
-                            onClick={() => {
-                              const name = prompt("Character Name?");
-                              if (name) addCharacter({ name, description: "", wardrobe: "", personality: "", notes: "" });
-                            }}
-                            className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 font-mono text-[10px] uppercase tracking-widest hover:border-zinc-600 hover:text-white transition-all flex items-center justify-center gap-2"
-                          >
-                            <Plus size={12} />
-                            New Character
-                          </button>
-                          
-                          <div className="space-y-4">
-                            {promptCraftCharacters.map(char => (
-                              <div key={char.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-lg space-y-3 group">
-                                <div className="flex items-center gap-3">
-                                  <div 
-                                    className="w-8 h-8 rounded-full flex items-center justify-center font-mono text-[10px] text-white"
-                                    style={{ backgroundColor: char.color }}
-                                  >
-                                    {char.initials}
-                                  </div>
-                                  <div className="flex-1">
-                                    <h4 className="text-xs font-bold text-white">{char.name}</h4>
-                                    <p className="text-[10px] text-zinc-500 truncate">{char.description}</p>
-                                  </div>
-                                  <button 
-                                    onClick={() => deleteCharacter(char.id)}
-                                    className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-500 transition-all"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
-                                <button 
-                                  onClick={() => insertCharacter(char)}
-                                  className="w-full py-2 bg-zinc-800 text-zinc-300 font-mono text-[9px] uppercase tracking-widest hover:bg-zinc-700 transition-all"
-                                >
-                                  Insert into Prompt
-                                </button>
-                              </div>
-                            ))}
+                      {/* HISTORY SECTION */}
+                      <div className="border-b border-zinc-900">
+                        <button 
+                          onClick={() => setExpandedLabSections(prev => prev.includes("history") ? prev.filter(s => s !== "history") : [...prev, "history"])}
+                          className="w-full flex items-center justify-between p-4 font-mono text-[10px] uppercase tracking-widest text-[#c87941] hover:bg-zinc-900/50 transition-all"
+                        >
+                          <div className="flex items-center gap-2">
+                            <History size={12} />
+                            History
                           </div>
-                        </div>
-                      )}
+                          {expandedLabSections.includes("history") ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                        </button>
 
-                      {promptCraftActiveTab === "history" && (
-                        <div className="space-y-3">
-                          {promptCraftHistory.map(item => (
-                            <button 
-                              key={item.id}
-                              onClick={() => setPromptCraftShot(item.shot)}
-                              className="w-full text-left p-3 bg-zinc-900/30 border border-zinc-800 hover:border-zinc-600 transition-all rounded group"
+                        <AnimatePresence>
+                          {expandedLabSections.includes("history") && (
+                            <motion.div 
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden bg-zinc-950/30"
                             >
-                              <div className="flex justify-between items-center mb-1">
-                                <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
-                                  {new Date(item.timestamp).toLocaleTimeString()}
-                                </span>
-                                <Trash2 
-                                  size={10} 
-                                  className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-red-500" 
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    const updated = promptCraftHistory.filter(h => h.id !== item.id);
-                                    setPromptCraftHistory(updated);
-                                    localStorage.setItem("promptlab_history", JSON.stringify(updated));
-                                  }}
-                                />
+                              <div className="p-4 space-y-3">
+                                {promptCraftHistory.length === 0 ? (
+                                  <p className="text-[10px] text-zinc-600 italic text-center py-4">No history yet</p>
+                                ) : (
+                                  promptCraftHistory.map(item => (
+                                    <button 
+                                      key={item.id}
+                                      onClick={() => setPromptCraftShot(item.shot)}
+                                      className="w-full text-left p-3 bg-zinc-900/30 border border-zinc-800 hover:border-zinc-600 transition-all rounded group"
+                                    >
+                                      <div className="flex justify-between items-center mb-1">
+                                        <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
+                                          {new Date(item.timestamp).toLocaleTimeString()}
+                                        </span>
+                                        <Trash2 
+                                          size={10} 
+                                          className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-red-500" 
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            const updated = promptCraftHistory.filter(h => h.id !== item.id);
+                                            setPromptCraftHistory(updated);
+                                            localStorage.setItem("promptlab_history", JSON.stringify(updated));
+                                          }}
+                                        />
+                                      </div>
+                                      <p className="text-[10px] text-zinc-400 line-clamp-2">{item.shot.subject}</p>
+                                    </button>
+                                  ))
+                                )}
                               </div>
-                              <p className="text-[10px] text-zinc-400 line-clamp-2">{item.shot.subject}</p>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
                     </div>
                   </motion.div>
                 )}
@@ -3560,7 +3686,6 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 {/* Toolbar */}
                 <div className="h-[60px] border-b border-zinc-800 flex items-center justify-between px-6 bg-black/80 backdrop-blur-md z-30">
                   <div className="flex items-center gap-4">
-                    <h1 className="font-display text-xl text-white italic tracking-tight">Prompt Lab</h1>
                     <div className="h-4 w-[1px] bg-zinc-800" />
                     <div className="flex items-center gap-2">
                       <button 
@@ -3939,7 +4064,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
                         {storyboarderImages.map((img, i) => (
                           <div key={i} className="relative aspect-square bg-zinc-800 border border-zinc-700 group">
-                            <img src={img} className="w-full h-full object-cover" />
+                            <LazyImage src={img} alt={`Reference ${i}`} className="w-full h-full" />
                             <button 
                               onClick={() => setStoryboarderImages(prev => prev.filter((_, idx) => idx !== i))}
                               className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
@@ -4053,7 +4178,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       >
                         <div className="relative aspect-video bg-[#09090b] border border-[#27272a] overflow-hidden group">
                           {frame.visual_url ? (
-                            <img src={frame.visual_url} className="w-full h-full object-cover" />
+                            <LazyImage src={frame.visual_url} alt={`Frame ${i+1}`} className="w-full h-full" />
                           ) : (
                             <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-[rgba(24,24,27,0.5)]">
                               <div className="text-[#27272a] font-mono text-[10px] uppercase tracking-widest">
@@ -4564,7 +4689,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                   height: extractorThumbnailSize === 'sm' ? '34px' : extractorThumbnailSize === 'md' ? '68px' : '135px'
                                 }}
                               >
-                                <img src={frame.url} className="w-full h-full object-cover" />
+                                <LazyImage src={frame.url} alt={`Frame at ${frame.time}s`} className="w-full h-full" />
                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/frame:opacity-100 transition-opacity flex items-center justify-center">
                                   <Play size={16} className="text-white" />
                                 </div>
@@ -4607,11 +4732,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                   );
                                 }}
                               >
-                                <img src={frame.url} className="w-full h-full object-cover" />
+                                <LazyImage src={frame.url} alt={frame.name || `Frame ${i+1}`} className="w-full h-full" />
                                 
                                 {frame.backgroundUrl && (
                                   <div className="absolute inset-0 z-10">
-                                    <img src={frame.backgroundUrl} className="w-full h-full object-cover opacity-50 mix-blend-overlay" />
+                                    <LazyImage src={frame.backgroundUrl} alt="Background" className="w-full h-full opacity-50 mix-blend-overlay" />
                                   </div>
                                 )}
 
@@ -5130,8 +5255,7 @@ function TrendDetailModal({
     setIsVisualizingVideo(true);
     setError(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-      let operation = await ai.models.generateVideos({
+      let operation = await geminiService.generateVideos({
         model: 'veo-3.1-lite-generate-preview',
         prompt: `A high-end, award-winning advertising video snippet inspired by the cultural trend "${trend.name}". 
         Viral Concept: ${trend.viral_concept}. 
@@ -5147,7 +5271,7 @@ function TrendDetailModal({
 
       while (!operation.done) {
         await new Promise(resolve => setTimeout(resolve, 10000));
-        operation = await ai.operations.getVideosOperation({ operation: operation });
+        operation = await geminiService.getVideosOperation({ operation: operation });
       }
 
       const downloadLink = operation.response?.generatedVideos?.[0]?.video?.uri;
@@ -5782,11 +5906,10 @@ function ConceptCard({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {concept.visual_url && (
                       <div className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden">
-                        <img 
+                        <LazyImage 
                           src={concept.visual_url} 
                           alt={concept.name} 
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
+                          className="w-full h-full"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
                         <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest">
@@ -5797,11 +5920,10 @@ function ConceptCard({
 
                     {concept.background_url && (
                       <div className="relative aspect-video bg-zinc-800 border border-zinc-700 overflow-hidden">
-                        <img 
+                        <LazyImage 
                           src={concept.background_url} 
                           alt="Atmospheric Background" 
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
+                          className="w-full h-full"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
                         <div className="absolute bottom-4 left-4 font-mono text-[10px] text-white/70 uppercase tracking-widest">
