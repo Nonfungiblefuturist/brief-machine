@@ -8,7 +8,6 @@ export type InfraTarget = {
 export const INFRASTRUCTURE_TARGETS: InfraTarget[] = [
   { id: "cinema_studio", label: "Cinema Studio 3.0", platform: "Higgsfield", color: "#FF3366" },
   { id: "click_to_ad", label: "Click-to-Ad", platform: "Higgsfield", color: "#FF3366" },
-  { id: "sora_trends", label: "Sora 2 Trends", platform: "Higgsfield", color: "#FF3366" },
   { id: "bullet_time", label: "Bullet Time", platform: "Higgsfield", color: "#FF3366" },
   { id: "giant_product", label: "Giant Product", platform: "Higgsfield", color: "#FF3366" },
   { id: "packshot", label: "Packshot", platform: "Higgsfield", color: "#FF3366" },
@@ -207,10 +206,6 @@ export function assemblePrompt(config: {
     case "click_to_ad":
       prompt = `Product URL input. Override: ${hook}. ${subject}. ${mood} tone. ${grade} look. ${extra}`.trim();
       workflow = `Higgsfield → Click-to-Ad → Paste product page URL → AI extracts brand intent + visual anchors → Override with prompt for creative direction → 2-5 min generation. Uses GPT-4.1 for deterministic structure.`;
-      break;
-    case "sora_trends":
-      prompt = `${hook}. ${subject}. Style: ${mood}, cinematic. ${grade}. Camera: ${move}. ${extra}`.trim();
-      workflow = `Sora 2 Trends → Upload single product/subject image → Select trend template → Paste prompt → Platform applies motion logic + pacing automatically. 150% higher share velocity vs baseline.`;
       break;
     case "soul_cast":
       prompt = `Character: ${subject}. ${hook}. ${mood} aesthetic. Detailed costume design, distinguishing features, unique silhouette. Consistent facial geometry across all shots. ${extra}`.trim();

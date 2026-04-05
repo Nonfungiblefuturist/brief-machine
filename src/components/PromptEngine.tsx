@@ -95,8 +95,8 @@ export default function PromptEngine() {
       className={cn(
         "px-3 py-1.5 rounded-full text-xs font-mono uppercase tracking-wider transition-all border",
         active 
-          ? `bg-opacity-15 border-opacity-40 text-white` 
-          : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/80"
+          ? `bg-opacity-15 border-opacity-40 text-zinc-100` 
+          : "bg-zinc-800/50 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-300"
       )}
       style={active ? { backgroundColor: `${color}26`, borderColor: `${color}66`, color: '#fff' } : {}}
     >
@@ -105,13 +105,13 @@ export default function PromptEngine() {
   );
 
   const SectionLabel = ({ children }: { children: React.ReactNode }) => (
-    <div className="text-[10px] font-mono uppercase tracking-[2px] text-white/30 mb-3">
+    <div className="text-[10px] font-mono uppercase tracking-[2px] text-zinc-500 mb-3">
       {children}
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#08080a] text-white font-sans selection:bg-[#FF3366]/30 p-4 md:p-8">
+    <div className="w-full font-sans selection:bg-zinc-800/50">
       {/* Toast */}
       <AnimatePresence>
         {toast && (
@@ -119,29 +119,16 @@ export default function PromptEngine() {
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-white/10 backdrop-blur-md border border-white/20 px-4 py-2 rounded-full text-sm font-mono z-50"
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-zinc-900 backdrop-blur-md border border-zinc-800 px-4 py-2 rounded-full text-sm font-mono z-50 text-zinc-200"
           >
             {toast}
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <header className="mb-8">
-          <div className="text-[9px] font-mono text-white/20 tracking-[4px] mb-2 uppercase">
-            Prompt Engine v3.0 — Kavan Method + Infrastructure
-          </div>
-          <h1 className="text-2xl md:text-[26px] font-bold font-['Space_Grotesk'] bg-gradient-to-r from-[#FF3366] via-[#FFB800] to-[#1273EB] bg-clip-text text-transparent mb-2">
-            AI Video & Ad Prompt Generator
-          </h1>
-          <p className="text-xs text-white/30 font-['IBM_Plex_Sans'] max-w-2xl leading-relaxed">
-            Kavan the Kid's production methodology + Higgsfield presets + Freepik models + Dor Brothers techniques. Copy-paste onto existing infrastructure.
-          </p>
-        </header>
-
+      <div className="w-full">
         {/* Tabs */}
-        <div className="flex flex-wrap gap-2 mb-8 border-b border-white/10 pb-4">
+        <div className="flex flex-wrap gap-2 mb-8 border-b border-zinc-800 pb-4">
           {[
             { id: "build", label: "Build" },
             { id: "methods", label: "Kavan Methods" },
@@ -153,7 +140,7 @@ export default function PromptEngine() {
               onClick={() => setActiveTab(tab.id as any)}
               className={cn(
                 "px-4 py-2 text-xs font-mono uppercase tracking-wider rounded-md transition-colors",
-                activeTab === tab.id ? "bg-white/10 text-white" : "text-white/40 hover:text-white/80 hover:bg-white/5"
+                activeTab === tab.id ? "bg-zinc-800 text-zinc-200" : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
               )}
             >
               {tab.label}
@@ -183,8 +170,8 @@ export default function PromptEngine() {
                         className={cn(
                           "p-3 rounded-lg border text-left transition-all flex flex-col gap-1",
                           infra === t.id 
-                            ? "bg-white/5 border-opacity-50" 
-                            : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]"
+                            ? "bg-zinc-800/50 border-zinc-700" 
+                            : "bg-zinc-900/50 border-zinc-800 hover:bg-zinc-800/50"
                         )}
                         style={infra === t.id ? { borderColor: t.color } : {}}
                       >
@@ -206,14 +193,14 @@ export default function PromptEngine() {
                           className={cn(
                             "p-3 rounded-lg border text-left transition-all flex items-start gap-3",
                             concept === f.id 
-                              ? "bg-white/10 border-white/20" 
-                              : "bg-white/[0.02] border-white/[0.05] hover:bg-white/[0.04]"
+                              ? "bg-zinc-800 border-zinc-700" 
+                              : "bg-zinc-900/50 border-zinc-800 hover:bg-zinc-800/50"
                           )}
                         >
                           <span className="text-xl">{f.icon}</span>
                           <div>
                             <div className="text-sm font-medium">{f.name}</div>
-                            <div className="text-[10px] text-white/40 mt-1">{f.desc}</div>
+                            <div className="text-[10px] text-zinc-500 mt-1">{f.desc}</div>
                           </div>
                         </button>
                         
@@ -226,14 +213,14 @@ export default function PromptEngine() {
                               exit={{ opacity: 0, height: 0 }}
                               className="overflow-hidden"
                             >
-                              <div className="p-3 bg-white/[0.02] border border-white/[0.05] rounded-lg flex flex-col gap-2">
+                              <div className="p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg flex flex-col gap-2">
                                 {f.prompts.map((p, i) => (
                                   <button
                                     key={i}
                                     onClick={() => setHookText(p)}
-                                    className="text-left text-xs text-white/70 hover:text-white p-2 hover:bg-white/5 rounded transition-colors flex gap-2"
+                                    className="text-left text-xs text-zinc-300 hover:text-zinc-100 p-2 hover:bg-zinc-800/50 rounded transition-colors flex gap-2"
                                   >
-                                    <span className="text-white/30 font-mono">{i+1}.</span>
+                                    <span className="text-zinc-500 font-mono">{i+1}.</span>
                                     <span>{p}</span>
                                   </button>
                                 ))}
@@ -255,7 +242,7 @@ export default function PromptEngine() {
                       value={subject}
                       onChange={(e) => setSubject(e.target.value)}
                       placeholder="e.g. A neon hologram of a cat driving at top speed"
-                      className="w-full bg-white/[0.03] border border-white/[0.07] rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-white/20"
+                      className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-500"
                     />
                   </section>
                   <section>
@@ -264,7 +251,7 @@ export default function PromptEngine() {
                       value={hookText}
                       onChange={(e) => setHookText(e.target.value)}
                       placeholder="Select a concept framework above or type manually..."
-                      className="w-full bg-white/[0.03] border border-white/[0.07] rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-white/20 min-h-[80px] resize-y"
+                      className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-500 min-h-[80px] resize-y"
                     />
                   </section>
                 </div>
@@ -282,13 +269,13 @@ export default function PromptEngine() {
                 </section>
 
                 {/* 6. Camera Rig */}
-                <section className="bg-white/[0.02] border border-white/[0.05] rounded-lg overflow-hidden">
+                <section className="bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden">
                   <button
                     onClick={() => setIsCameraExpanded(!isCameraExpanded)}
-                    className="w-full p-4 flex items-center justify-between hover:bg-white/[0.02] transition-colors"
+                    className="w-full p-4 flex items-center justify-between hover:bg-zinc-900/50 transition-colors"
                   >
                     <SectionLabel>6. Camera Rig + Meta Tokens (Optional)</SectionLabel>
-                    {isCameraExpanded ? <ChevronUp size={16} className="text-white/30" /> : <ChevronDown size={16} className="text-white/30" />}
+                    {isCameraExpanded ? <ChevronUp size={16} className="text-zinc-500" /> : <ChevronDown size={16} className="text-zinc-500" />}
                   </button>
                   
                   <AnimatePresence>
@@ -299,33 +286,33 @@ export default function PromptEngine() {
                         exit={{ height: 0 }}
                         className="overflow-hidden"
                       >
-                        <div className="p-4 pt-0 space-y-4 border-t border-white/[0.05]">
+                        <div className="p-4 pt-0 space-y-4 border-t border-zinc-800">
                           <div>
-                            <div className="text-[10px] text-white/30 mb-2 font-mono">BODY</div>
+                            <div className="text-[10px] text-zinc-500 mb-2 font-mono">BODY</div>
                             <div className="flex flex-wrap gap-2">
                               {CAMERA_RIG.bodies.map(b => <Pill key={b} active={camBody === b} onClick={() => setCamBody(camBody === b ? "" : b)} color="#22d3ee">{b}</Pill>)}
                             </div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-white/30 mb-2 font-mono">LENS</div>
+                            <div className="text-[10px] text-zinc-500 mb-2 font-mono">LENS</div>
                             <div className="flex flex-wrap gap-2">
                               {CAMERA_RIG.lenses.map(l => <Pill key={l} active={camLens === l} onClick={() => setCamLens(camLens === l ? "" : l)} color="#22d3ee">{l}</Pill>)}
                             </div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-white/30 mb-2 font-mono">MOVE</div>
+                            <div className="text-[10px] text-zinc-500 mb-2 font-mono">MOVE</div>
                             <div className="flex flex-wrap gap-2">
                               {CAMERA_RIG.moves.map(m => <Pill key={m} active={camMove === m} onClick={() => setCamMove(camMove === m ? "" : m)} color="#22d3ee">{m}</Pill>)}
                             </div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-white/30 mb-2 font-mono">GRADE</div>
+                            <div className="text-[10px] text-zinc-500 mb-2 font-mono">GRADE</div>
                             <div className="flex flex-wrap gap-2">
                               {CAMERA_RIG.grades.map(g => <Pill key={g} active={camGrade === g} onClick={() => setCamGrade(camGrade === g ? "" : g)} color="#22d3ee">{g}</Pill>)}
                             </div>
                           </div>
                           <div>
-                            <div className="text-[10px] text-white/30 mb-2 font-mono">META TOKEN</div>
+                            <div className="text-[10px] text-zinc-500 mb-2 font-mono">META TOKEN</div>
                             <div className="flex flex-wrap gap-2">
                               {CAMERA_RIG.meta.map(m => <Pill key={m} active={camMeta === m} onClick={() => setCamMeta(camMeta === m ? "" : m)} color="#f472b6">{m}</Pill>)}
                             </div>
@@ -344,7 +331,7 @@ export default function PromptEngine() {
                     value={extra}
                     onChange={(e) => setExtra(e.target.value)}
                     placeholder="Constraints, dialogue, actions..."
-                    className="w-full bg-white/[0.03] border border-white/[0.07] rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-white/20"
+                    className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-500"
                   />
                 </section>
 
@@ -352,7 +339,7 @@ export default function PromptEngine() {
                 <button
                   onClick={handleBuild}
                   disabled={!infra || !subject}
-                  className="w-full py-4 rounded-lg font-mono uppercase tracking-widest text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-white/10 hover:bg-white/20 text-white"
+                  className="w-full py-4 rounded-lg font-mono uppercase tracking-widest text-sm font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed bg-zinc-800 hover:bg-zinc-700 text-zinc-100"
                 >
                   Build Prompt →
                 </button>
@@ -366,20 +353,20 @@ export default function PromptEngine() {
                   >
                     <div className="flex items-center justify-between">
                       <div className="flex gap-2">
-                        <span className="px-2 py-1 rounded text-[10px] font-mono uppercase bg-white/10">{output.platform}</span>
-                        <span className="px-2 py-1 rounded text-[10px] font-mono uppercase bg-white/5 text-white/60">{output.label}</span>
+                        <span className="px-2 py-1 rounded text-[10px] font-mono uppercase bg-zinc-800">{output.platform}</span>
+                        <span className="px-2 py-1 rounded text-[10px] font-mono uppercase bg-zinc-800/50 text-zinc-400">{output.label}</span>
                       </div>
                       <div className="flex gap-2">
-                        <button onClick={handleSave} className="p-2 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors" title="Save">
+                        <button onClick={handleSave} className="p-2 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors" title="Save">
                           <Save size={16} />
                         </button>
-                        <button onClick={() => handleCopy(output.prompt)} className="p-2 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors" title="Copy Prompt">
+                        <button onClick={() => handleCopy(output.prompt)} className="p-2 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors" title="Copy Prompt">
                           <Copy size={16} />
                         </button>
                       </div>
                     </div>
 
-                    <div className="p-4 rounded-lg bg-white/[0.03] border border-white/[0.07] text-sm leading-[1.65] text-white/85">
+                    <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800 text-sm leading-[1.65] text-zinc-200">
                       {output.prompt}
                     </div>
 
@@ -390,7 +377,7 @@ export default function PromptEngine() {
 
                     <button
                       onClick={() => setOutput(null)}
-                      className="w-full py-3 rounded-lg font-mono uppercase tracking-widest text-xs transition-all bg-white/5 hover:bg-white/10 text-white/60 hover:text-white flex items-center justify-center gap-2"
+                      className="w-full py-3 rounded-lg font-mono uppercase tracking-widest text-xs transition-all bg-zinc-800/50 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 flex items-center justify-center gap-2"
                     >
                       <span>↻</span> Rebuild
                     </button>
@@ -401,23 +388,23 @@ export default function PromptEngine() {
 
             {activeTab === "methods" && (
               <div className="space-y-6">
-                <p className="text-sm text-white/60 leading-relaxed max-w-3xl">
+                <p className="text-sm text-zinc-400 leading-relaxed max-w-3xl">
                   Production methodology from Kavan the Kid — sold Chronicles of Bone (5 seasons) to Freepik as an Original Series. First SAG-approved AI film (Echo Hunter). Solo creator, every frame.
                 </p>
                 
                 <div className="space-y-3">
                   {Object.entries(KAVAN_METHODS).map(([key, method]) => (
-                    <div key={key} className="bg-white/[0.02] border border-white/[0.05] rounded-lg overflow-hidden">
+                    <div key={key} className="bg-zinc-900/50 border border-zinc-800 rounded-lg overflow-hidden">
                       <button
                         onClick={() => setExpandedMethod(expandedMethod === key ? null : key)}
-                        className="w-full p-4 text-left hover:bg-white/[0.02] transition-colors flex items-start justify-between gap-4"
+                        className="w-full p-4 text-left hover:bg-zinc-900/50 transition-colors flex items-start justify-between gap-4"
                       >
                         <div>
-                          <h3 className="font-['Space_Grotesk'] font-bold text-sm text-white/90">{method.name}</h3>
-                          <p className="text-[11px] text-white/40 mt-1">{method.why}</p>
+                          <h3 className="font-['Space_Grotesk'] font-bold text-sm text-zinc-200">{method.name}</h3>
+                          <p className="text-[11px] text-zinc-500 mt-1">{method.why}</p>
                         </div>
                         <div className="mt-1">
-                          {expandedMethod === key ? <ChevronUp size={16} className="text-white/30" /> : <ChevronDown size={16} className="text-white/30" />}
+                          {expandedMethod === key ? <ChevronUp size={16} className="text-zinc-500" /> : <ChevronDown size={16} className="text-zinc-500" />}
                         </div>
                       </button>
                       
@@ -429,11 +416,11 @@ export default function PromptEngine() {
                             exit={{ height: 0 }}
                             className="overflow-hidden"
                           >
-                            <div className="p-4 pt-0 border-t border-white/[0.05]">
+                            <div className="p-4 pt-0 border-t border-zinc-800">
                               <ol className="space-y-2 mt-3">
                                 {method.steps.map((step, i) => (
-                                  <li key={i} className="text-xs text-white/70 flex gap-3">
-                                    <span className="text-white/30 font-mono">{i+1}.</span>
+                                  <li key={i} className="text-xs text-zinc-300 flex gap-3">
+                                    <span className="text-zinc-500 font-mono">{i+1}.</span>
                                     <span className="leading-relaxed">{step}</span>
                                   </li>
                                 ))}
@@ -446,8 +433,8 @@ export default function PromptEngine() {
                   ))}
                 </div>
 
-                <div className="mt-8 p-6 rounded-lg bg-gradient-to-br from-[#FF3366]/10 via-[#FFB800]/10 to-[#1273EB]/10 border border-white/10">
-                  <p className="text-sm text-white/90 leading-relaxed italic">
+                <div className="mt-8 p-6 rounded-lg bg-gradient-to-br from-[#FF3366]/10 via-[#FFB800]/10 to-[#1273EB]/10 border border-zinc-800">
+                  <p className="text-sm text-zinc-200 leading-relaxed italic">
                     "Kavan didn't sell a video. He sold a universe — 5 seasons written, story bibles built, character IP grounded in physical photographs for copyright protection. The Freepik deal happened because the package was COMPLETE. Build the world first, generate frames second."
                   </p>
                 </div>
@@ -457,12 +444,12 @@ export default function PromptEngine() {
             {activeTab === "concepts" && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {CONCEPT_FRAMEWORKS.map(f => (
-                  <div key={f.id} className="bg-white/[0.02] border border-white/[0.05] rounded-lg p-4 flex flex-col">
+                  <div key={f.id} className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 flex flex-col">
                     <div className="flex items-center gap-3 mb-2">
                       <span className="text-2xl">{f.icon}</span>
                       <div>
-                        <h3 className="font-medium text-sm text-white/90">{f.name}</h3>
-                        <p className="text-[10px] text-white/40">{f.desc}</p>
+                        <h3 className="font-medium text-sm text-zinc-200">{f.name}</h3>
+                        <p className="text-[10px] text-zinc-500">{f.desc}</p>
                       </div>
                     </div>
                     <div className="mt-4 space-y-2 flex-1">
@@ -470,9 +457,9 @@ export default function PromptEngine() {
                         <button
                           key={i}
                           onClick={() => handleCopy(p)}
-                          className="w-full text-left text-xs text-white/70 hover:text-white p-2 hover:bg-white/5 rounded transition-colors flex gap-2 group"
+                          className="w-full text-left text-xs text-zinc-300 hover:text-zinc-100 p-2 hover:bg-zinc-800/50 rounded transition-colors flex gap-2 group"
                         >
-                          <span className="text-white/30 font-mono group-hover:text-[#FFB800] transition-colors">{i+1}.</span>
+                          <span className="text-zinc-500 font-mono group-hover:text-[#FFB800] transition-colors">{i+1}.</span>
                           <span className="leading-relaxed">{p}</span>
                         </button>
                       ))}
@@ -485,25 +472,25 @@ export default function PromptEngine() {
             {activeTab === "saved" && (
               <div className="space-y-4">
                 {savedPrompts.length === 0 ? (
-                  <div className="text-center py-12 text-white/30 text-sm font-mono">
+                  <div className="text-center py-12 text-zinc-500 text-sm font-mono">
                     No saved prompts. Build and save from the Build tab.
                   </div>
                 ) : (
                   savedPrompts.map(p => (
-                    <div key={p.id} className="bg-white/[0.02] border border-white/[0.05] rounded-lg p-4">
+                    <div key={p.id} className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex gap-2 items-center">
-                          <span className="px-2 py-1 rounded text-[10px] font-mono uppercase bg-white/10">{p.platform}</span>
-                          <span className="px-2 py-1 rounded text-[10px] font-mono uppercase bg-white/5 text-white/60">{p.label}</span>
-                          <span className="text-[10px] text-white/30 font-mono ml-2">
+                          <span className="px-2 py-1 rounded text-[10px] font-mono uppercase bg-zinc-800">{p.platform}</span>
+                          <span className="px-2 py-1 rounded text-[10px] font-mono uppercase bg-zinc-800/50 text-zinc-400">{p.label}</span>
+                          <span className="text-[10px] text-zinc-500 font-mono ml-2">
                             {new Date(p.timestamp).toLocaleString()}
                           </span>
                         </div>
-                        <button onClick={() => handleCopy(p.prompt)} className="p-2 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors">
+                        <button onClick={() => handleCopy(p.prompt)} className="p-2 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors">
                           <Copy size={14} />
                         </button>
                       </div>
-                      <div className="text-sm text-white/80 leading-relaxed mb-3">
+                      <div className="text-sm text-zinc-300 leading-relaxed mb-3">
                         {p.prompt}
                       </div>
                       <div className="text-[10px] text-cyan-400/60 font-mono leading-relaxed bg-cyan-500/5 p-2 rounded border border-cyan-500/10">
@@ -518,8 +505,8 @@ export default function PromptEngine() {
         </AnimatePresence>
 
         {/* Footer */}
-        <footer className="mt-16 pt-8 border-t border-white/5 text-center">
-          <div className="text-[10px] font-mono text-white/20 uppercase tracking-widest">
+        <footer className="mt-16 pt-8 border-t border-zinc-800/50 text-center">
+          <div className="text-[10px] font-mono text-zinc-500 uppercase tracking-widest">
             Intelligence: Kavan the Kid (AI Cinema) · Higgsfield · Freepik · Dor Brothers · 2026 Viral Research
           </div>
         </footer>
