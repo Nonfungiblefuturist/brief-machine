@@ -41,7 +41,9 @@ import {
   Save,
   Film,
   FileImage,
-  Camera
+  Camera,
+  Scissors,
+  Video
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -352,7 +354,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
@@ -401,6 +403,14 @@ export default function App() {
     focalLength: "35mm",
     movements: [] as string[]
   });
+
+  // Extractor State
+  const [extractorVideoFile, setExtractorVideoFile] = useState<File | null>(null);
+  const [extractorVideoUrl, setExtractorVideoUrl] = useState<string | null>(null);
+  const [extractorFrames, setExtractorFrames] = useState<string[]>([]);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionInterval, setExtractionInterval] = useState(1); // seconds
+  const extractorVideoRef = useRef<HTMLVideoElement>(null);
 
   const getCreditEstimate = (model: string, length: string) => {
     const base = model === "Cinema Studio" ? 100 : 50;
@@ -832,6 +842,87 @@ Think D&AD. Think Cannes.`,
       setError("Failed to export images.");
     } finally {
       setIsExportingImages(false);
+    }
+  };
+
+  const handleExtractorVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1024 * 1024 * 1024) {
+      setError("Video file too large. Maximum size is 1GB.");
+      return;
+    }
+
+    setExtractorVideoFile(file);
+    const url = URL.createObjectURL(file);
+    setExtractorVideoUrl(url);
+    setExtractorFrames([]);
+  };
+
+  const extractFrame = useCallback(() => {
+    const video = extractorVideoRef.current;
+    if (!video) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const frame = canvas.toDataURL('image/jpeg', 0.9);
+    setExtractorFrames(prev => [...prev, frame]);
+  }, []);
+
+  const autoExtractFrames = async () => {
+    const video = extractorVideoRef.current;
+    if (!video) return;
+
+    setIsExtracting(true);
+    setExtractorFrames([]);
+    
+    const duration = video.duration;
+    let currentTime = 0;
+
+    while (currentTime < duration) {
+      video.currentTime = currentTime;
+      await new Promise(resolve => {
+        const onSeeked = () => {
+          video.removeEventListener('seeked', onSeeked);
+          extractFrame();
+          resolve(null);
+        };
+        video.addEventListener('seeked', onSeeked);
+      });
+      currentTime += extractionInterval;
+    }
+    setIsExtracting(false);
+  };
+
+  const exportExtractorFramesAsZip = async () => {
+    if (extractorFrames.length === 0) return;
+    setIsExporting(true);
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder("extracted-frames");
+      
+      extractorFrames.forEach((frame, i) => {
+        const base64Data = frame.split(',')[1];
+        folder?.file(`frame-${i + 1}.jpg`, base64Data, { base64: true });
+      });
+      
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(content);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `extracted-frames-${Date.now()}.zip`;
+      link.click();
+    } catch (e) {
+      console.error("Export failed", e);
+      setError("Export failed. Please try again.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -1801,6 +1892,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               { id: "input", label: "Creative Engine", icon: Zap },
               { id: "trends", label: "Trend Scanner", icon: Search, action: fetchTrends },
               { id: "storyboarder", label: "Auto Storyboarder", icon: Layout },
+              { id: "extractor", label: "Frame Extractor", icon: Scissors },
               { id: "projects", label: "Saved Projects", icon: Folder, action: user ? () => { fetchSavedProjects(user.uid); setView("projects"); } : undefined },
               { id: "shortlist", label: "Shortlist", icon: Check },
               { id: "prompt", label: "Prompt DNA", icon: Code },
@@ -2879,6 +2971,150 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             >
               <PromptBlock title="Strategist DNA" content={MASTER_PROMPT} />
               <PromptBlock title="Analyst DNA" content={TREND_PROMPT} />
+            </motion.div>
+          )}
+
+          {/* EXTRACTOR VIEW */}
+          {view === "extractor" && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-12"
+            >
+              <div className="bg-zinc-900/50 border border-zinc-800 p-8 md:p-10 space-y-8">
+                <div className="space-y-2">
+                  <h2 className="font-display text-3xl text-white italic">Video Frame Extractor</h2>
+                  <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Extract high-quality frames for AI workflows</p>
+                </div>
+
+                <div className="space-y-8">
+                  {!extractorVideoUrl ? (
+                    <div className="border-2 border-dashed border-zinc-800 p-20 flex flex-col items-center justify-center gap-6 group hover:border-zinc-600 transition-all">
+                      <div className="w-16 h-16 rounded-full bg-zinc-900 flex items-center justify-center text-zinc-700 group-hover:text-white transition-colors">
+                        <Video size={32} />
+                      </div>
+                      <div className="text-center space-y-2">
+                        <p className="font-display text-xl text-zinc-500 group-hover:text-white transition-colors">Upload video to start extracting</p>
+                        <p className="font-mono text-[10px] text-zinc-700 uppercase tracking-widest">Supports MP4, MOV, WEBM up to 1GB</p>
+                      </div>
+                      <label className="cursor-pointer px-8 py-4 bg-white text-black font-display italic text-xl hover:bg-zinc-200 transition-all">
+                        Select Video File
+                        <input type="file" accept="video/*" className="hidden" onChange={handleExtractorVideoUpload} />
+                      </label>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                      <div className="space-y-6">
+                        <div className="relative aspect-video bg-black border border-zinc-800 overflow-hidden">
+                          <video 
+                            ref={extractorVideoRef}
+                            src={extractorVideoUrl} 
+                            className="w-full h-full object-contain"
+                            controls
+                          />
+                        </div>
+                        
+                        <div className="p-6 bg-zinc-900/30 border border-zinc-800 space-y-6">
+                          <div className="flex justify-between items-center">
+                            <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Extraction Interval</label>
+                            <div className="flex items-center gap-4">
+                              <span className="font-display text-xl text-white italic">{extractionInterval}s</span>
+                              <div className="flex gap-1">
+                                {[1, 2, 5, 10].map(val => (
+                                  <button
+                                    key={val}
+                                    onClick={() => setExtractionInterval(val)}
+                                    className={cn(
+                                      "w-8 h-8 font-mono text-[10px] border transition-all flex items-center justify-center",
+                                      extractionInterval === val ? "bg-white text-black border-white" : "text-zinc-500 border-zinc-800 hover:border-zinc-600"
+                                    )}
+                                  >
+                                    {val}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4">
+                            <button
+                              onClick={extractFrame}
+                              className="py-4 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 font-mono text-[10px] uppercase tracking-widest transition-all flex items-center justify-center gap-2"
+                            >
+                              <Camera size={14} />
+                              Manual Capture
+                            </button>
+                            <button
+                              onClick={autoExtractFrames}
+                              disabled={isExtracting}
+                              className="py-4 bg-white text-black font-display italic text-xl hover:bg-zinc-200 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                            >
+                              {isExtracting ? <RefreshCcw size={18} className="animate-spin" /> : <Scissors size={18} />}
+                              Auto Extract
+                            </button>
+                          </div>
+
+                          <button
+                            onClick={() => {
+                              setExtractorVideoFile(null);
+                              setExtractorVideoUrl(null);
+                              setExtractorFrames([]);
+                            }}
+                            className="w-full py-3 border border-red-900/30 text-red-500/50 hover:text-red-500 hover:border-red-500 font-mono text-[10px] uppercase tracking-widest transition-all"
+                          >
+                            Remove Video
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="flex justify-between items-center">
+                          <h3 className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Extracted Frames ({extractorFrames.length})</h3>
+                          {extractorFrames.length > 0 && (
+                            <button
+                              onClick={exportExtractorFramesAsZip}
+                              disabled={isExporting}
+                              className="px-6 py-3 bg-cyan-600 text-white font-display italic text-lg hover:bg-cyan-500 transition-all flex items-center gap-3 shadow-lg shadow-cyan-900/20"
+                            >
+                              {isExporting ? <RefreshCcw size={16} className="animate-spin" /> : <Download size={16} />}
+                              Export ZIP
+                            </button>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-[600px] overflow-y-auto p-2 border border-zinc-800 bg-black/30">
+                          {extractorFrames.length === 0 ? (
+                            <div className="col-span-full py-20 flex flex-col items-center justify-center text-zinc-800 gap-4">
+                              <FileImage size={48} />
+                              <p className="font-display italic text-xl">No frames extracted yet</p>
+                            </div>
+                          ) : (
+                            extractorFrames.map((frame, i) => (
+                              <motion.div 
+                                key={i}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="relative aspect-video bg-zinc-900 border border-zinc-800 group"
+                              >
+                                <img src={frame} className="w-full h-full object-cover" />
+                                <button
+                                  onClick={() => setExtractorFrames(prev => prev.filter((_, idx) => idx !== i))}
+                                  className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <X size={10} />
+                                </button>
+                                <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/80 font-mono text-[8px] text-white border border-zinc-800">
+                                  FRAME {i + 1}
+                                </div>
+                              </motion.div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </motion.div>
           )}
 
