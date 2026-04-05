@@ -55,7 +55,11 @@ import {
   Maximize2,
   Grid,
   Settings,
-  Sparkle
+  Sparkle,
+  Moon,
+  Sun,
+  Eye,
+  Star
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -68,7 +72,7 @@ interface ExtractorFrame {
   time?: number;
 }
 
-const PROMPTCRAFT_PRESETS = {
+const BRIEF_MACHINE_PRESETS = {
   cameras: ["ARRI Alexa 35", "RED V-RAPTOR", "Sony FX6", "Canon C70", "Blackmagic URSA", "Bolex 16mm", "Super 8 film camera"],
   lenses: ["anamorphic 50mm", "vintage Helios 44-2", "Cooke S4 35mm", "Zeiss Master Prime 85mm", "tilt-shift lens", "macro lens", "fisheye lens"],
   filmStocks: ["Kodak Vision3 500T", "Kodak Portra 400", "Fuji Eterna Vivid 500", "CineStill 800T", "Kodak Ektachrome", "Ilford HP5 Plus"],
@@ -276,7 +280,7 @@ interface SavedProject {
   name: string;
   input: string;
   frames: StoryboardFrame[];
-  prompts?: PromptCraftHistoryItem[];
+  prompts?: BriefMachineHistoryItem[];
   extractedFrames?: ExtractorFrame[];
   thumbnailUrl?: string;
   createdAt: any;
@@ -356,7 +360,7 @@ interface Trend {
   industry: string;
 }
 
-interface PromptCraftCharacter {
+interface BriefMachineCharacter {
   id: string;
   name: string;
   description: string;
@@ -367,7 +371,7 @@ interface PromptCraftCharacter {
   color: string;
 }
 
-interface PromptCraftShot {
+interface BriefMachineShot {
   id: string;
   subject: string;
   composition: string;
@@ -378,19 +382,19 @@ interface PromptCraftShot {
   imageUrl?: string;
 }
 
-interface PromptCraftHistoryItem {
+interface BriefMachineHistoryItem {
   id: string;
   timestamp: number;
-  shot: PromptCraftShot;
+  shot: BriefMachineShot;
 }
 
-const PromptCraftHistoryComponent = ({ 
+const BriefMachineHistoryComponent = ({ 
   history, 
   onSelect, 
   onDelete 
 }: { 
-  history: PromptCraftHistoryItem[], 
-  onSelect: (shot: PromptCraftShot) => void,
+  history: BriefMachineHistoryItem[], 
+  onSelect: (shot: BriefMachineShot) => void,
   onDelete: (id: string) => void
 }) => {
   if (history.length === 0) {
@@ -605,8 +609,8 @@ export default function App() {
   const [attachedExtractorFrames, setAttachedExtractorFrames] = useState<ExtractorFrame[]>([]);
   const [isMultiShot, setIsMultiShot] = useState(false);
   
-  // PromptCraft State
-  const [promptCraftShot, setPromptCraftShot] = useState<PromptCraftShot>({
+  // Brief Machine State
+  const [briefMachineShot, setBriefMachineShot] = useState<BriefMachineShot>({
     id: Date.now().toString(),
     subject: "",
     composition: "",
@@ -615,14 +619,14 @@ export default function App() {
     style: "",
     motion: ""
   });
-  const [promptCraftRawInput, setPromptCraftRawInput] = useState("");
-  const [promptCraftCharacters, setPromptCraftCharacters] = useState<PromptCraftCharacter[]>([]);
-  const [promptCraftHistory, setPromptCraftHistory] = useState<PromptCraftHistoryItem[]>([]);
-  const [promptCraftStoryboard, setPromptCraftStoryboard] = useState<PromptCraftShot[]>([]);
+  const [briefMachineRawInput, setBriefMachineRawInput] = useState("");
+  const [briefMachineCharacters, setBriefMachineCharacters] = useState<BriefMachineCharacter[]>([]);
+  const [briefMachineHistory, setBriefMachineHistory] = useState<BriefMachineHistoryItem[]>([]);
+  const [briefMachineStoryboard, setBriefMachineStoryboard] = useState<BriefMachineShot[]>([]);
   const [isStoryboardMode, setIsStoryboardMode] = useState(false);
-  const [isPromptCraftSidebarOpen, setIsPromptCraftSidebarOpen] = useState(true);
-  const [isPromptCraftRightPanelOpen, setIsPromptCraftRightPanelOpen] = useState(true);
-  const [promptCraftActiveTab, setPromptCraftActiveTab] = useState<"presets" | "characters" | "history">("presets");
+  const [isBriefMachineSidebarOpen, setIsBriefMachineSidebarOpen] = useState(true);
+  const [isBriefMachineRightPanelOpen, setIsBriefMachineRightPanelOpen] = useState(true);
+  const [briefMachineActiveTab, setBriefMachineActiveTab] = useState<"presets" | "characters" | "history">("presets");
   const [isBeautifying, setIsBeautifying] = useState(false);
   const [isSmartEditing, setIsSmartEditing] = useState(false);
   const [smartEditInstruction, setSmartEditInstruction] = useState("");
@@ -631,7 +635,9 @@ export default function App() {
   const [expandedLabSections, setExpandedLabSections] = useState<string[]>(["studio"]);
   const [expandedPresetCategories, setExpandedPresetCategories] = useState<string[]>([]);
   const [hoveredStoryboardFrame, setHoveredStoryboardFrame] = useState<number | null>(null);
-  const [promptCraftGallery, setPromptCraftGallery] = useState<string[]>([]);
+  const [briefMachineGallery, setBriefMachineGallery] = useState<string[]>([]);
+  const [briefMachineTheme, setBriefMachineTheme] = useState<"dark" | "light" | "high-contrast">("dark");
+  const [favoritePresets, setFavoritePresets] = useState<string[]>([]);
   const [galleryGridCols, setGalleryGridCols] = useState<1 | 2 | 4>(2);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [higgsfieldModel, setHiggsfieldModel] = useState<string>("Cinema Studio");
@@ -747,14 +753,14 @@ export default function App() {
   };
 
   const beautifyPrompt = async () => {
-    if (!promptCraftRawInput.trim()) return;
+    if (!briefMachineRawInput.trim()) return;
     setIsBeautifying(true);
     try {
       const response = await geminiService.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: `You are a professional AI prompt engineer for cinematic image and video generation. Take this unstructured prompt and reorganize it into clean, well-written sections. If a section has no relevant content, leave it empty.
         
-        RAW INPUT: ${promptCraftRawInput}`,
+        RAW INPUT: ${briefMachineRawInput}`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -773,8 +779,8 @@ export default function App() {
       });
       
       const result = JSON.parse(response.text);
-      setPromptCraftShot(prev => ({ ...prev, ...result }));
-      setPromptCraftRawInput("");
+      setBriefMachineShot(prev => ({ ...prev, ...result }));
+      setBriefMachineRawInput("");
     } catch (err) {
       console.error(err);
       setError("Beautify failed.");
@@ -792,12 +798,12 @@ export default function App() {
         contents: `You are an expert AI prompt editor. Modify the provided structured prompt according to the user's instruction. Keep all sections intact. Only change what the instruction asks for.
         
         CURRENT PROMPT:
-        Subject: ${promptCraftShot.subject}
-        Composition: ${promptCraftShot.composition}
-        Lighting: ${promptCraftShot.lighting}
-        Camera: ${promptCraftShot.camera}
-        Style: ${promptCraftShot.style}
-        Motion: ${promptCraftShot.motion}
+        Subject: ${briefMachineShot.subject}
+        Composition: ${briefMachineShot.composition}
+        Lighting: ${briefMachineShot.lighting}
+        Camera: ${briefMachineShot.camera}
+        Style: ${briefMachineShot.style}
+        Motion: ${briefMachineShot.motion}
         
         INSTRUCTION: ${instruction}`,
         config: {
@@ -818,7 +824,7 @@ export default function App() {
       });
       
       const result = JSON.parse(response.text);
-      setPromptCraftShot(prev => ({ ...prev, ...result }));
+      setBriefMachineShot(prev => ({ ...prev, ...result }));
       setSmartEditInstruction("");
     } catch (err) {
       console.error(err);
@@ -836,12 +842,12 @@ export default function App() {
         contents: `Add more cinematic detail and richness to each section of this prompt while preserving the original creative intent. Make it more vivid and specific.
         
         CURRENT PROMPT:
-        Subject: ${promptCraftShot.subject}
-        Composition: ${promptCraftShot.composition}
-        Lighting: ${promptCraftShot.lighting}
-        Camera: ${promptCraftShot.camera}
-        Style: ${promptCraftShot.style}
-        Motion: ${promptCraftShot.motion}`,
+        Subject: ${briefMachineShot.subject}
+        Composition: ${briefMachineShot.composition}
+        Lighting: ${briefMachineShot.lighting}
+        Camera: ${briefMachineShot.camera}
+        Style: ${briefMachineShot.style}
+        Motion: ${briefMachineShot.motion}`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -860,7 +866,7 @@ export default function App() {
       });
       
       const result = JSON.parse(response.text);
-      setPromptCraftShot(prev => ({ ...prev, ...result }));
+      setBriefMachineShot(prev => ({ ...prev, ...result }));
     } catch (err) {
       console.error(err);
       setError("Expand failed.");
@@ -877,12 +883,12 @@ export default function App() {
         contents: `Strip this prompt down to only its most essential elements. Remove unnecessary detail. Make it clean and minimal.
         
         CURRENT PROMPT:
-        Subject: ${promptCraftShot.subject}
-        Composition: ${promptCraftShot.composition}
-        Lighting: ${promptCraftShot.lighting}
-        Camera: ${promptCraftShot.camera}
-        Style: ${promptCraftShot.style}
-        Motion: ${promptCraftShot.motion}`,
+        Subject: ${briefMachineShot.subject}
+        Composition: ${briefMachineShot.composition}
+        Lighting: ${briefMachineShot.lighting}
+        Camera: ${briefMachineShot.camera}
+        Style: ${briefMachineShot.style}
+        Motion: ${briefMachineShot.motion}`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -901,7 +907,7 @@ export default function App() {
       });
       
       const result = JSON.parse(response.text);
-      setPromptCraftShot(prev => ({ ...prev, ...result }));
+      setBriefMachineShot(prev => ({ ...prev, ...result }));
     } catch (err) {
       console.error(err);
       setError("Simplify failed.");
@@ -912,30 +918,30 @@ export default function App() {
 
   const rollPrompt = () => {
     const getRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
-    setPromptCraftShot({
+    setBriefMachineShot({
       id: Date.now().toString(),
       subject: "A mysterious figure in a futuristic city",
-      composition: getRandom(PROMPTCRAFT_PRESETS.compositions),
-      lighting: getRandom(PROMPTCRAFT_PRESETS.lighting),
-      camera: getRandom(PROMPTCRAFT_PRESETS.cameras),
-      style: getRandom(PROMPTCRAFT_PRESETS.styles),
-      motion: getRandom(PROMPTCRAFT_PRESETS.motions)
+      composition: getRandom(BRIEF_MACHINE_PRESETS.compositions),
+      lighting: getRandom(BRIEF_MACHINE_PRESETS.lighting),
+      camera: getRandom(BRIEF_MACHINE_PRESETS.cameras),
+      style: getRandom(BRIEF_MACHINE_PRESETS.styles),
+      motion: getRandom(BRIEF_MACHINE_PRESETS.motions)
     });
   };
 
   const saveToHistory = () => {
-    const newItem: PromptCraftHistoryItem = {
+    const newItem: BriefMachineHistoryItem = {
       id: Date.now().toString(),
       timestamp: Date.now(),
-      shot: { ...promptCraftShot }
+      shot: { ...briefMachineShot }
     };
-    const updatedHistory = [newItem, ...promptCraftHistory].slice(0, 50);
-    setPromptCraftHistory(updatedHistory);
+    const updatedHistory = [newItem, ...briefMachineHistory].slice(0, 50);
+    setBriefMachineHistory(updatedHistory);
     localStorage.setItem("promptlab_history", JSON.stringify(updatedHistory));
   };
 
   const copyFullPrompt = () => {
-    const full = `${promptCraftShot.subject}. ${promptCraftShot.composition}. ${promptCraftShot.lighting}. ${promptCraftShot.camera}. ${promptCraftShot.style}. ${promptCraftShot.motion}.`.replace(/\.\s\./g, ".").trim();
+    const full = `${briefMachineShot.subject}. ${briefMachineShot.composition}. ${briefMachineShot.lighting}. ${briefMachineShot.camera}. ${briefMachineShot.style}. ${briefMachineShot.motion}.`.replace(/\.\s\./g, ".").trim();
     navigator.clipboard.writeText(full);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -943,7 +949,7 @@ export default function App() {
   };
 
   const clearPrompt = () => {
-    setPromptCraftShot({
+    setBriefMachineShot({
       id: Date.now().toString(),
       subject: "",
       composition: "",
@@ -954,29 +960,29 @@ export default function App() {
     });
   };
 
-  const addCharacter = (char: Omit<PromptCraftCharacter, "id" | "initials" | "color">) => {
+  const addCharacter = (char: Omit<BriefMachineCharacter, "id" | "initials" | "color">) => {
     const initials = char.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
     const colors = ["#c87941", "#41c879", "#4179c8", "#c84179", "#7941c8"];
-    const color = colors[promptCraftCharacters.length % colors.length];
-    const newChar: PromptCraftCharacter = {
+    const color = colors[briefMachineCharacters.length % colors.length];
+    const newChar: BriefMachineCharacter = {
       ...char,
       id: Date.now().toString(),
       initials,
       color
     };
-    const updated = [...promptCraftCharacters, newChar];
-    setPromptCraftCharacters(updated);
+    const updated = [...briefMachineCharacters, newChar];
+    setBriefMachineCharacters(updated);
     localStorage.setItem("promptlab_characters", JSON.stringify(updated));
   };
 
   const deleteCharacter = (id: string) => {
-    const updated = promptCraftCharacters.filter(c => c.id !== id);
-    setPromptCraftCharacters(updated);
+    const updated = briefMachineCharacters.filter(c => c.id !== id);
+    setBriefMachineCharacters(updated);
     localStorage.setItem("promptlab_characters", JSON.stringify(updated));
   };
 
-  const insertCharacter = (char: PromptCraftCharacter) => {
-    setPromptCraftShot(prev => ({
+  const insertCharacter = (char: BriefMachineCharacter) => {
+    setBriefMachineShot(prev => ({
       ...prev,
       subject: prev.subject ? `${prev.subject}, ${char.description} wearing ${char.wardrobe}` : `${char.name}: ${char.description} wearing ${char.wardrobe}`
     }));
@@ -984,10 +990,10 @@ export default function App() {
 
   useEffect(() => {
     const savedHistory = localStorage.getItem("promptlab_history");
-    if (savedHistory) setPromptCraftHistory(JSON.parse(savedHistory));
+    if (savedHistory) setBriefMachineHistory(JSON.parse(savedHistory));
     
     const savedChars = localStorage.getItem("promptlab_characters");
-    if (savedChars) setPromptCraftCharacters(JSON.parse(savedChars));
+    if (savedChars) setBriefMachineCharacters(JSON.parse(savedChars));
 
     const savedBriefs = localStorage.getItem("brief_history");
     if (savedBriefs) setBriefHistory(JSON.parse(savedBriefs));
@@ -998,6 +1004,25 @@ export default function App() {
       localStorage.setItem("promptlab_visited", "true");
     }
   }, []);
+
+  useEffect(() => {
+    const savedFavs = localStorage.getItem("briefmachine_favorites");
+    if (savedFavs) setFavoritePresets(JSON.parse(savedFavs));
+  }, []);
+
+  const toggleFavorite = (preset: string) => {
+    setFavoritePresets(prev => {
+      const updated = prev.includes(preset) ? prev.filter(p => p !== preset) : [...prev, preset];
+      localStorage.setItem("briefmachine_favorites", JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1017,25 +1042,25 @@ export default function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [view, promptCraftShot, promptCraftRawInput]);
+  }, [view, briefMachineShot, briefMachineRawInput]);
 
-  const exportPromptCraftJSON = () => {
+  const exportBriefMachineJSON = () => {
     const data = {
-      history: promptCraftHistory,
-      storyboard: promptCraftStoryboard,
-      characters: promptCraftCharacters
+      history: briefMachineHistory,
+      storyboard: briefMachineStoryboard,
+      characters: briefMachineCharacters
     };
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `PromptCraft_Export_${Date.now()}.json`;
+    a.download = `BriefMachine_Export_${Date.now()}.json`;
     a.click();
   };
 
   const exportStoryboardText = () => {
-    let text = "PROMPTCRAFT STORYBOARD EXPORT\n\n";
-    promptCraftStoryboard.forEach((shot, i) => {
+    let text = "BRIEF MACHINE STORYBOARD EXPORT\n\n";
+    briefMachineStoryboard.forEach((shot, i) => {
       text += `SHOT ${i + 1}\n`;
       text += `Subject: ${shot.subject}\n`;
       text += `Composition: ${shot.composition}\n`;
@@ -1061,7 +1086,7 @@ export default function App() {
     
     setIsSaving(true);
     const projectName = type === 'storyboard' ? storyboarderProjectName : 
-                        type === 'prompt' ? `Prompt Lab ${new Date().toLocaleDateString()}` :
+                        type === 'prompt' ? `Brief Machine Lab ${new Date().toLocaleDateString()}` :
                         `Extractor ${new Date().toLocaleDateString()}`;
     
     const projectId = projectName.replace(/\s+/g, '-').toLowerCase() + '-' + Date.now();
@@ -1074,7 +1099,7 @@ export default function App() {
         name: projectName,
         input: type === 'storyboard' ? storyboarderInput : "",
         frames: type === 'storyboard' ? storyboarderFrames : [],
-        prompts: type === 'prompt' ? promptCraftHistory : [],
+        prompts: type === 'prompt' ? briefMachineHistory : [],
         extractedFrames: type === 'extractor' ? extractorFrames : [],
         thumbnailUrl: type === 'storyboard' ? (storyboarderFrames[0]?.visual_url || null) : 
                       type === 'extractor' ? (extractorFrames[0]?.url || null) : null,
@@ -1100,7 +1125,7 @@ export default function App() {
       setStoryboarderFrames(project.frames);
       setView("storyboarder");
     } else if (project.prompts && project.prompts.length > 0) {
-      setPromptCraftHistory(project.prompts);
+      setBriefMachineHistory(project.prompts);
       setView("promptlab");
     } else if (project.extractedFrames && project.extractedFrames.length > 0) {
       setExtractorFrames(project.extractedFrames);
@@ -1971,12 +1996,6 @@ Think D&AD. Think Cannes.`,
     } finally {
       setIsLoadingPastTrends(false);
     }
-  };
-
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   };
 
   const refineConcept = async (index: number, feedback: string) => {
@@ -3480,18 +3499,55 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="bg-black text-[#e0e0e0] flex overflow-hidden font-sans min-h-[calc(100vh-200px)] border border-zinc-800"
+              className={cn(
+                "flex overflow-hidden font-sans min-h-[calc(100vh-200px)] border transition-all duration-500",
+                briefMachineTheme === "dark" ? "bg-black text-[#e0e0e0] border-zinc-800" : 
+                briefMachineTheme === "light" ? "bg-zinc-50 text-zinc-900 border-zinc-200" : 
+                "bg-black text-yellow-400 border-yellow-400"
+              )}
             >
               {/* Left Sidebar */}
               <AnimatePresence>
-                {isPromptCraftSidebarOpen && (
+                {isBriefMachineSidebarOpen && (
                   <motion.div 
                     initial={{ x: -300 }}
                     animate={{ x: 0 }}
                     exit={{ x: -300 }}
-                    className="w-[300px] border-r border-zinc-800 flex flex-col bg-black"
+                    className={cn(
+                      "w-[300px] border-r flex flex-col transition-colors duration-500",
+                      briefMachineTheme === "dark" ? "bg-black border-zinc-800" : 
+                      briefMachineTheme === "light" ? "bg-white border-zinc-200" : 
+                      "bg-black border-yellow-400"
+                    )}
                   >
                     <div className="flex-1 overflow-y-auto scrollbar-hide">
+                      {/* THEME SWITCHER */}
+                      <div className={cn(
+                        "p-4 border-b flex items-center justify-between",
+                        briefMachineTheme === "dark" ? "border-zinc-900" : 
+                        briefMachineTheme === "light" ? "border-zinc-100" : 
+                        "border-yellow-900"
+                      )}>
+                        <span className="font-mono text-[9px] uppercase tracking-widest text-zinc-500">Theme</span>
+                        <div className="flex gap-1">
+                          {(["dark", "light", "high-contrast"] as const).map(t => (
+                            <button 
+                              key={t}
+                              onClick={() => setBriefMachineTheme(t)}
+                              className={cn(
+                                "w-6 h-6 rounded flex items-center justify-center border transition-all",
+                                briefMachineTheme === t ? "border-[#c87941] bg-[#c87941]/10" : "border-zinc-800 hover:border-zinc-600"
+                              )}
+                              title={t.charAt(0).toUpperCase() + t.slice(1)}
+                            >
+                              {t === "dark" && <Moon size={10} />}
+                              {t === "light" && <Sun size={10} />}
+                              {t === "high-contrast" && <Eye size={10} />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* STUDIO SECTION */}
                       <div className="border-b border-zinc-900">
                         <button 
@@ -3536,7 +3592,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                 </div>
                                 
                                 <div className="space-y-4">
-                                  {promptCraftCharacters.map(char => (
+                                  {briefMachineCharacters.map(char => (
                                     <div key={char.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-lg space-y-3 group hover:border-zinc-700 transition-all">
                                       <div className="flex items-center gap-3">
                                         <div 
@@ -3550,8 +3606,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                             type="text"
                                             value={char.name}
                                             onChange={(e) => {
-                                              const updated = promptCraftCharacters.map(c => c.id === char.id ? { ...c, name: e.target.value } : c);
-                                              setPromptCraftCharacters(updated);
+                                              const updated = briefMachineCharacters.map(c => c.id === char.id ? { ...c, name: e.target.value } : c);
+                                              setBriefMachineCharacters(updated);
                                               localStorage.setItem("promptlab_characters", JSON.stringify(updated));
                                             }}
                                             className="bg-transparent border-none p-0 text-xs font-bold text-white focus:ring-0 w-full"
@@ -3559,8 +3615,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                           <textarea 
                                             value={char.description}
                                             onChange={(e) => {
-                                              const updated = promptCraftCharacters.map(c => c.id === char.id ? { ...c, description: e.target.value } : c);
-                                              setPromptCraftCharacters(updated);
+                                              const updated = briefMachineCharacters.map(c => c.id === char.id ? { ...c, description: e.target.value } : c);
+                                              setBriefMachineCharacters(updated);
                                               localStorage.setItem("promptlab_characters", JSON.stringify(updated));
                                             }}
                                             placeholder="Role/Description..."
@@ -3586,12 +3642,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                             const desc = prompt("Update description?", char.description);
                                             const wardrobe = prompt("Update wardrobe?", char.wardrobe);
                                             if (desc !== null || wardrobe !== null) {
-                                              const updated = promptCraftCharacters.map(c => c.id === char.id ? { 
+                                              const updated = briefMachineCharacters.map(c => c.id === char.id ? { 
                                                 ...c, 
                                                 description: desc ?? c.description,
                                                 wardrobe: wardrobe ?? c.wardrobe
                                               } : c);
-                                              setPromptCraftCharacters(updated);
+                                              setBriefMachineCharacters(updated);
                                               localStorage.setItem("promptlab_characters", JSON.stringify(updated));
                                             }
                                           }}
@@ -3610,7 +3666,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       </div>
 
                       {/* PRESETS SECTION */}
-                      <div className="border-b border-zinc-900">
+                      <div className={cn(
+                        "border-b",
+                        briefMachineTheme === "dark" ? "border-zinc-900" : 
+                        briefMachineTheme === "light" ? "border-zinc-100" : 
+                        "border-yellow-900"
+                      )}>
                         <button 
                           onClick={() => setExpandedLabSections(prev => prev.includes("presets") ? prev.filter(s => s !== "presets") : [...prev, "presets"])}
                           className="w-full flex items-center justify-between p-4 font-mono text-[10px] uppercase tracking-widest text-[#c87941] hover:bg-zinc-900/50 transition-all"
@@ -3628,14 +3689,77 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                               initial={{ height: 0, opacity: 0 }}
                               animate={{ height: "auto", opacity: 1 }}
                               exit={{ height: 0, opacity: 0 }}
-                              className="overflow-hidden bg-zinc-950/30"
+                              className={cn(
+                                "overflow-hidden",
+                                briefMachineTheme === "dark" ? "bg-zinc-950/30" : 
+                                briefMachineTheme === "light" ? "bg-zinc-50" : 
+                                "bg-black"
+                              )}
                             >
                               <div className="p-4 space-y-2">
-                                {Object.entries(PROMPTCRAFT_PRESETS).map(([category, items]) => (
-                                  <div key={category} className="border border-zinc-900 rounded overflow-hidden">
+                                {/* FAVORITES CATEGORY */}
+                                {favoritePresets.length > 0 && (
+                                  <div className="border border-[#c87941]/30 rounded overflow-hidden mb-4">
+                                    <div className="w-full flex items-center justify-between p-2 bg-[#c87941]/5">
+                                      <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#c87941] flex items-center gap-2">
+                                        <Star size={10} fill="#c87941" /> Favorites
+                                      </span>
+                                    </div>
+                                    <div className="p-2 grid grid-cols-1 gap-1">
+                                      {favoritePresets.map(item => (
+                                        <div key={item} className="flex items-center group">
+                                          <button 
+                                            onClick={() => {
+                                              // We don't know the category here easily, so we just apply it to subject or try to find it
+                                              // For now, let's just use it as a generic insert if we can't find category
+                                              setBriefMachineShot(prev => ({ ...prev, subject: prev.subject ? `${prev.subject}, ${item}` : item }));
+                                            }}
+                                            className={cn(
+                                              "flex-1 text-left py-2 px-3 text-[11px] transition-all rounded border border-transparent",
+                                              briefMachineTheme === "dark" ? "text-zinc-400 hover:bg-zinc-900 hover:text-white hover:border-zinc-800" : 
+                                              briefMachineTheme === "light" ? "text-zinc-600 hover:bg-zinc-100 hover:text-black hover:border-zinc-200" : 
+                                              "text-yellow-600 hover:bg-zinc-900 hover:text-yellow-400 hover:border-yellow-400"
+                                            )}
+                                          >
+                                            {item}
+                                          </button>
+                                          <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button 
+                                              onClick={() => copyToClipboard(item)}
+                                              className="p-2 text-zinc-500 hover:text-white"
+                                              title="Copy Preset"
+                                            >
+                                              <Copy size={10} />
+                                            </button>
+                                            <button 
+                                              onClick={() => toggleFavorite(item)}
+                                              className="p-2 text-[#c87941]"
+                                              title="Remove from Favorites"
+                                            >
+                                              <Star size={10} fill="#c87941" />
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {Object.entries(BRIEF_MACHINE_PRESETS).map(([category, items]) => (
+                                  <div key={category} className={cn(
+                                    "border rounded overflow-hidden",
+                                    briefMachineTheme === "dark" ? "border-zinc-900" : 
+                                    briefMachineTheme === "light" ? "border-zinc-200" : 
+                                    "border-yellow-900"
+                                  )}>
                                     <button 
                                       onClick={() => setExpandedPresetCategories(prev => prev.includes(category) ? prev.filter(c => c !== category) : [...prev, category])}
-                                      className="w-full flex items-center justify-between p-2 bg-zinc-900/50 hover:bg-zinc-900 transition-all"
+                                      className={cn(
+                                        "w-full flex items-center justify-between p-2 transition-all",
+                                        briefMachineTheme === "dark" ? "bg-zinc-900/50 hover:bg-zinc-900" : 
+                                        briefMachineTheme === "light" ? "bg-zinc-100 hover:bg-zinc-200" : 
+                                        "bg-zinc-900 hover:bg-zinc-800"
+                                      )}
                                     >
                                       <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-zinc-500">{category}</span>
                                       {expandedPresetCategories.includes(category) ? <ChevronDown size={10} className="text-zinc-600" /> : <ChevronRight size={10} className="text-zinc-600" />}
@@ -3651,27 +3775,52 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                         >
                                           <div className="p-2 grid grid-cols-1 gap-1">
                                             {items.map(item => (
-                                              <button 
-                                                key={item}
-                                                onClick={() => {
-                                                  const key = category === "cameras" ? "camera" : 
-                                                              category === "lenses" ? "camera" :
-                                                              category === "filmStocks" ? "camera" :
-                                                              category.slice(0, -1) as keyof PromptCraftShot;
-                                                  
-                                                  setPromptCraftShot(prev => {
-                                                    let val = prev[key as keyof PromptCraftShot] || "";
-                                                    if (category === "cameras" || category === "lenses" || category === "filmStocks") {
-                                                      val = val ? `${val}, ${item}` : item;
-                                                      return { ...prev, camera: val };
-                                                    }
-                                                    return { ...prev, [key]: item };
-                                                  });
-                                                }}
-                                                className="text-left py-2 px-3 text-[11px] text-zinc-500 hover:bg-zinc-900 hover:text-white transition-all rounded border border-transparent hover:border-zinc-800"
-                                              >
-                                                {item}
-                                              </button>
+                                              <div key={item} className="flex items-center group">
+                                                <button 
+                                                  onClick={() => {
+                                                    const key = category === "cameras" ? "camera" : 
+                                                                category === "lenses" ? "camera" :
+                                                                category === "filmStocks" ? "camera" :
+                                                                category.slice(0, -1) as keyof BriefMachineShot;
+                                                    
+                                                    setBriefMachineShot(prev => {
+                                                      let val = prev[key as keyof BriefMachineShot] || "";
+                                                      if (category === "cameras" || category === "lenses" || category === "filmStocks") {
+                                                        val = val ? `${val}, ${item}` : item;
+                                                        return { ...prev, camera: val };
+                                                      }
+                                                      return { ...prev, [key]: item };
+                                                    });
+                                                  }}
+                                                  className={cn(
+                                                    "flex-1 text-left py-2 px-3 text-[11px] transition-all rounded border border-transparent",
+                                                    briefMachineTheme === "dark" ? "text-zinc-500 hover:bg-zinc-900 hover:text-white hover:border-zinc-800" : 
+                                                    briefMachineTheme === "light" ? "text-zinc-600 hover:bg-zinc-100 hover:text-black hover:border-zinc-200" : 
+                                                    "text-yellow-600 hover:bg-zinc-900 hover:text-yellow-400 hover:border-yellow-400"
+                                                  )}
+                                                >
+                                                  {item}
+                                                </button>
+                                                <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                                                  <button 
+                                                    onClick={() => copyToClipboard(item)}
+                                                    className="p-2 text-zinc-500 hover:text-white"
+                                                    title="Copy Preset"
+                                                  >
+                                                    <Copy size={10} />
+                                                  </button>
+                                                  <button 
+                                                    onClick={() => toggleFavorite(item)}
+                                                    className={cn(
+                                                      "p-2 transition-colors",
+                                                      favoritePresets.includes(item) ? "text-[#c87941]" : "text-zinc-500 hover:text-white"
+                                                    )}
+                                                    title={favoritePresets.includes(item) ? "Remove from Favorites" : "Add to Favorites"}
+                                                  >
+                                                    <Star size={10} fill={favoritePresets.includes(item) ? "#c87941" : "none"} />
+                                                  </button>
+                                                </div>
+                                              </div>
                                             ))}
                                           </div>
                                         </motion.div>
@@ -3707,12 +3856,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                               className="overflow-hidden bg-zinc-950/30"
                             >
                               <div className="p-4">
-                                <PromptCraftHistoryComponent 
-                                  history={promptCraftHistory}
-                                  onSelect={setPromptCraftShot}
+                                <BriefMachineHistoryComponent 
+                                  history={briefMachineHistory}
+                                  onSelect={setBriefMachineShot}
                                   onDelete={(id) => {
-                                    const updated = promptCraftHistory.filter(h => h.id !== id);
-                                    setPromptCraftHistory(updated);
+                                    const updated = briefMachineHistory.filter(h => h.id !== id);
+                                    setBriefMachineHistory(updated);
                                     localStorage.setItem("promptlab_history", JSON.stringify(updated));
                                   }}
                                 />
@@ -3728,26 +3877,46 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
 
               {/* Toggle Sidebar */}
               <button 
-                onClick={() => setIsPromptCraftSidebarOpen(!isPromptCraftSidebarOpen)}
+                onClick={() => setIsBriefMachineSidebarOpen(!isBriefMachineSidebarOpen)}
                 className="absolute left-0 top-1/2 -translate-y-1/2 z-50 bg-zinc-900 border border-zinc-800 p-1 text-zinc-500 hover:text-white transition-all"
-                style={{ left: isPromptCraftSidebarOpen ? "300px" : "0" }}
+                style={{ left: isBriefMachineSidebarOpen ? "300px" : "0" }}
               >
-                {isPromptCraftSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+                {isBriefMachineSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
               </button>
 
               {/* Main Area */}
-              <div className="flex-1 flex flex-col bg-black overflow-hidden">
+              <div className={cn(
+                "flex-1 flex flex-col overflow-hidden transition-colors duration-500",
+                briefMachineTheme === "dark" ? "bg-black" : 
+                briefMachineTheme === "light" ? "bg-white" : 
+                "bg-black"
+              )}>
                 {/* Toolbar */}
-                <div className="h-[60px] border-b border-zinc-800 flex items-center justify-between px-6 bg-black/80 backdrop-blur-md z-30">
+                <div className={cn(
+                  "h-[60px] border-b flex items-center justify-between px-6 backdrop-blur-md z-30 transition-colors duration-500",
+                  briefMachineTheme === "dark" ? "border-zinc-800 bg-black/80" : 
+                  briefMachineTheme === "light" ? "border-zinc-200 bg-white/80" : 
+                  "border-yellow-400 bg-black/80"
+                )}>
                   <div className="flex items-center gap-4">
-                    <div className="h-4 w-[1px] bg-zinc-800" />
+                    <div className={cn(
+                      "h-4 w-[1px]",
+                      briefMachineTheme === "dark" ? "bg-zinc-800" : 
+                      briefMachineTheme === "light" ? "bg-zinc-200" : 
+                      "bg-yellow-400"
+                    )} />
                     <div className="flex items-center gap-2">
                       <button 
                         onClick={beautifyPrompt}
                         disabled={isBeautifying}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50"
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 border transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50",
+                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+                        )}
                       >
-                        {isBeautifying ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} className="text-[#c87941]" />}
+                        {isBeautifying ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-[#c87941]"} />}
                         Beautify
                       </button>
                       <button 
@@ -3756,32 +3925,52 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           if (inst) smartEditPrompt(inst);
                         }}
                         disabled={isSmartEditing}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50"
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 border transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50",
+                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+                        )}
                       >
-                        {isSmartEditing ? <RefreshCcw size={12} className="animate-spin" /> : <Code size={12} className="text-cyan-500" />}
+                        {isSmartEditing ? <RefreshCcw size={12} className="animate-spin" /> : <Code size={12} className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-cyan-500"} />}
                         Smart Edit
                       </button>
                       <button 
                         onClick={expandPrompt}
                         disabled={isExpanding}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50"
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 border transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50",
+                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+                        )}
                       >
-                        {isExpanding ? <RefreshCcw size={12} className="animate-spin" /> : <Maximize2 size={12} className="text-purple-500" />}
+                        {isExpanding ? <RefreshCcw size={12} className="animate-spin" /> : <Maximize2 size={12} className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-purple-500"} />}
                         Expand
                       </button>
                       <button 
                         onClick={simplifyPrompt}
                         disabled={isSimplifying}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50"
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 border transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50",
+                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+                        )}
                       >
-                        {isSimplifying ? <RefreshCcw size={12} className="animate-spin" /> : <Minus size={12} className="text-zinc-500" />}
+                        {isSimplifying ? <RefreshCcw size={12} className="animate-spin" /> : <Minus size={12} className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-zinc-500"} />}
                         Simplify
                       </button>
                       <button 
                         onClick={rollPrompt}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest"
+                        className={cn(
+                          "flex items-center gap-2 px-3 py-1.5 border transition-all rounded font-mono text-[10px] uppercase tracking-widest",
+                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+                        )}
                       >
-                        <RefreshCcw size={12} className="text-orange-500" />
+                        <RefreshCcw size={12} className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-orange-500"} />
                         Roll
                       </button>
                     </div>
@@ -3792,7 +3981,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       <button 
                         onClick={() => saveProject('prompt')}
                         disabled={isSaving}
-                        className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest"
+                        className={cn(
+                          "flex items-center gap-2 px-4 py-2 border transition-all rounded font-mono text-[10px] uppercase tracking-widest",
+                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600" : 
+                          briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200 text-zinc-600 hover:text-black hover:border-zinc-400" : 
+                          "bg-black border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+                        )}
                       >
                         {isSaving ? <RefreshCcw size={14} className="animate-spin" /> : <Save size={14} />}
                         Save Lab
@@ -3800,14 +3994,20 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     )}
                     <button 
                       onClick={copyFullPrompt}
-                      className="flex items-center gap-2 px-4 py-2 bg-[#c87941] text-white hover:bg-[#b06a38] transition-all rounded font-mono text-[10px] uppercase tracking-widest shadow-lg shadow-[#c87941]/20"
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-2 transition-all rounded font-mono text-[10px] uppercase tracking-widest shadow-lg",
+                        briefMachineTheme === "high-contrast" ? "bg-yellow-400 text-black shadow-yellow-400/20" : "bg-[#c87941] text-white hover:bg-[#b06a38] shadow-[#c87941]/20"
+                      )}
                     >
                       {copied ? <Check size={14} /> : <Copy size={14} />}
                       {copied ? "Copied" : "Copy Prompt"}
                     </button>
                     <button 
                       onClick={clearPrompt}
-                      className="p-2 text-zinc-600 hover:text-red-500 transition-all"
+                      className={cn(
+                        "p-2 transition-all",
+                        briefMachineTheme === "high-contrast" ? "text-yellow-600 hover:text-yellow-400" : "text-zinc-600 hover:text-red-500"
+                      )}
                     >
                       <Trash2 size={18} />
                     </button>
@@ -3819,12 +4019,22 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   <div className="max-w-4xl mx-auto space-y-10">
                     {/* Raw Input */}
                     <div className="space-y-3">
-                      <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">Raw Input / Paste Area</label>
+                      <label className={cn(
+                        "font-mono text-[10px] uppercase tracking-widest block",
+                        briefMachineTheme === "dark" ? "text-zinc-600" : 
+                        briefMachineTheme === "light" ? "text-zinc-400" : 
+                        "text-yellow-600"
+                      )}>Raw Input / Paste Area</label>
                       <textarea 
-                        value={promptCraftRawInput}
-                        onChange={(e) => setPromptCraftRawInput(e.target.value)}
+                        value={briefMachineRawInput}
+                        onChange={(e) => setBriefMachineRawInput(e.target.value)}
                         placeholder="Paste messy text here and click 'Beautify'..."
-                        className="w-full bg-black/30 border border-zinc-800 p-4 text-zinc-300 font-mono text-xs focus:border-[#c87941] focus:outline-none transition-all min-h-[80px] resize-none"
+                        className={cn(
+                          "w-full border p-4 font-mono text-xs focus:outline-none transition-all min-h-[80px] resize-none",
+                          briefMachineTheme === "dark" ? "bg-black/30 border-zinc-800 text-zinc-300 focus:border-[#c87941]" : 
+                          briefMachineTheme === "light" ? "bg-white border-zinc-200 text-zinc-700 focus:border-zinc-400" : 
+                          "bg-black border-yellow-400 text-yellow-400 focus:border-yellow-200"
+                        )}
                       />
                     </div>
 
@@ -3839,16 +4049,21 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         { key: "motion", label: "Motion", color: "text-pink-400", accent: "border-pink-900" }
                       ].map(section => (
                         <div key={section.key} className="space-y-3">
-                          <label className={cn("font-mono text-[10px] uppercase tracking-widest block", section.color)}>
+                          <label className={cn(
+                            "font-mono text-[10px] uppercase tracking-widest block",
+                            briefMachineTheme === "high-contrast" ? "text-yellow-400" : section.color
+                          )}>
                             {section.label}
                           </label>
                           <textarea 
-                            value={promptCraftShot[section.key as keyof PromptCraftShot] || ""}
-                            onChange={(e) => setPromptCraftShot(prev => ({ ...prev, [section.key]: e.target.value }))}
+                            value={briefMachineShot[section.key as keyof BriefMachineShot] || ""}
+                            onChange={(e) => setBriefMachineShot(prev => ({ ...prev, [section.key]: e.target.value }))}
                             className={cn(
-                              "w-full bg-black/20 border p-4 text-zinc-200 font-sans text-sm focus:outline-none transition-all min-h-[100px] resize-none",
-                              section.accent,
-                              "focus:border-[#c87941]"
+                              "w-full border p-4 font-sans text-sm focus:outline-none transition-all min-h-[100px] resize-none",
+                              briefMachineTheme === "dark" ? "bg-black/20 border-zinc-800 text-zinc-200 focus:border-[#c87941]" : 
+                              briefMachineTheme === "light" ? "bg-white border-zinc-200 text-zinc-800 focus:border-zinc-400" : 
+                              "bg-black border-yellow-400 text-yellow-400 focus:border-yellow-200",
+                              briefMachineTheme === "high-contrast" ? "border-yellow-400" : section.accent
                             )}
                             placeholder={`Describe ${section.label.toLowerCase()}...`}
                           />
@@ -3857,23 +4072,45 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     </div>
 
                     {/* Preview Area */}
-                    <div className="bg-black/40 border border-zinc-800 p-8 rounded-lg space-y-6">
+                    <div className={cn(
+                      "border p-8 rounded-lg space-y-6 transition-colors duration-500",
+                      briefMachineTheme === "dark" ? "bg-black/40 border-zinc-800" : 
+                      briefMachineTheme === "light" ? "bg-zinc-50 border-zinc-200" : 
+                      "bg-black border-yellow-400"
+                    )}>
                       <div className="flex justify-between items-center">
-                        <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">Full Prompt Preview</label>
+                        <label className={cn(
+                          "font-mono text-[10px] uppercase tracking-widest block",
+                          briefMachineTheme === "dark" ? "text-zinc-600" : 
+                          briefMachineTheme === "light" ? "text-zinc-400" : 
+                          "text-yellow-600"
+                        )}>Full Prompt Preview</label>
                         <button 
                           onClick={copyFullPrompt}
-                          className="text-zinc-500 hover:text-white transition-all"
+                          className={cn(
+                            "transition-all",
+                            briefMachineTheme === "dark" ? "text-zinc-500 hover:text-white" : 
+                            briefMachineTheme === "light" ? "text-zinc-400 hover:text-black" : 
+                            "text-yellow-600 hover:text-yellow-400"
+                          )}
                         >
                           <Copy size={14} />
                         </button>
                       </div>
-                      <div className="font-mono text-sm leading-relaxed">
-                        <span className="text-white">{promptCraftShot.subject}</span>
-                        {promptCraftShot.composition && <span className="text-cyan-400">. {promptCraftShot.composition}</span>}
-                        {promptCraftShot.lighting && <span className="text-orange-400">. {promptCraftShot.lighting}</span>}
-                        {promptCraftShot.camera && <span className="text-purple-400">. {promptCraftShot.camera}</span>}
-                        {promptCraftShot.style && <span className="text-emerald-400">. {promptCraftShot.style}</span>}
-                        {promptCraftShot.motion && <span className="text-pink-400">. {promptCraftShot.motion}</span>}
+                      <div className={cn(
+                        "font-mono text-sm leading-relaxed",
+                        briefMachineTheme === "light" ? "text-zinc-800" : "text-white"
+                      )}>
+                        <span className={cn(
+                          briefMachineTheme === "light" ? "text-black" : 
+                          briefMachineTheme === "high-contrast" ? "text-yellow-400" : 
+                          "text-white"
+                        )}>{briefMachineShot.subject}</span>
+                        {briefMachineShot.composition && <span className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-cyan-400"}>. {briefMachineShot.composition}</span>}
+                        {briefMachineShot.lighting && <span className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-orange-400"}>. {briefMachineShot.lighting}</span>}
+                        {briefMachineShot.camera && <span className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-purple-400"}>. {briefMachineShot.camera}</span>}
+                        {briefMachineShot.style && <span className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-emerald-400"}>. {briefMachineShot.style}</span>}
+                        {briefMachineShot.motion && <span className={briefMachineTheme === "high-contrast" ? "text-yellow-400" : "text-pink-400"}>. {briefMachineShot.motion}</span>}
                       </div>
                     </div>
                   </div>
@@ -3881,35 +4118,57 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
 
                 {/* Storyboard Mode Strip */}
                 {isStoryboardMode && (
-                  <div className="h-[180px] border-t border-zinc-800 bg-black/50 p-4 flex gap-4 overflow-x-auto scrollbar-hide">
-                    {promptCraftStoryboard.map((shot, i) => (
+                  <div className={cn(
+                    "h-[180px] border-t p-4 flex gap-4 overflow-x-auto scrollbar-hide transition-colors duration-500",
+                    briefMachineTheme === "dark" ? "border-zinc-800 bg-black/50" : 
+                    briefMachineTheme === "light" ? "border-zinc-200 bg-zinc-50" : 
+                    "border-yellow-400 bg-black/50"
+                  )}>
+                    {briefMachineStoryboard.map((shot, i) => (
                       <div 
                         key={i}
-                        onClick={() => setPromptCraftShot(shot)}
+                        onClick={() => setBriefMachineShot(shot)}
                         className={cn(
-                          "w-60 h-full bg-zinc-900 border flex-shrink-0 cursor-pointer group relative overflow-hidden",
-                          promptCraftShot.id === shot.id ? "border-[#c87941]" : "border-zinc-800 hover:border-zinc-600"
+                          "w-60 h-full border flex-shrink-0 cursor-pointer group relative overflow-hidden transition-all",
+                          briefMachineTheme === "dark" ? "bg-zinc-900 border-zinc-800 hover:border-zinc-600" : 
+                          briefMachineTheme === "light" ? "bg-white border-zinc-200 hover:border-zinc-400" : 
+                          "bg-black border-yellow-400 hover:border-yellow-200",
+                          briefMachineShot.id === shot.id && "border-[#c87941] ring-1 ring-[#c87941]"
                         )}
                       >
-                        <div className="absolute top-2 left-2 z-10 bg-black/80 px-2 py-0.5 rounded font-mono text-[8px] text-white">
+                        <div className={cn(
+                          "absolute top-2 left-2 z-10 px-2 py-0.5 rounded font-mono text-[8px]",
+                          briefMachineTheme === "light" ? "bg-zinc-200 text-zinc-800" : "bg-black/80 text-white"
+                        )}>
                           Shot {i + 1}
                         </div>
                         {shot.imageUrl ? (
                           <img src={shot.imageUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center text-zinc-800">
+                          <div className={cn(
+                            "w-full h-full flex items-center justify-center",
+                            briefMachineTheme === "light" ? "text-zinc-300" : "text-zinc-800"
+                          )}>
                             <ImageIcon size={32} />
                           </div>
                         )}
-                        <div className="absolute bottom-0 left-0 w-full p-2 bg-black/80 border-t border-zinc-800">
-                          <p className="text-[9px] text-zinc-400 line-clamp-1 font-mono">{shot.subject}</p>
+                        <div className={cn(
+                          "absolute bottom-0 left-0 w-full p-2 border-t",
+                          briefMachineTheme === "dark" ? "bg-black/80 border-zinc-800" : 
+                          briefMachineTheme === "light" ? "bg-white/90 border-zinc-100" : 
+                          "bg-black/80 border-yellow-400"
+                        )}>
+                          <p className={cn(
+                            "text-[9px] line-clamp-1 font-mono",
+                            briefMachineTheme === "light" ? "text-zinc-600" : "text-zinc-400"
+                          )}>{shot.subject}</p>
                         </div>
                       </div>
                     ))}
                     <button 
                       onClick={() => {
-                        const newShot = { ...promptCraftShot, id: Date.now().toString() };
-                        setPromptCraftStoryboard([...promptCraftStoryboard, newShot]);
+                        const newShot = { ...briefMachineShot, id: Date.now().toString() };
+                        setBriefMachineStoryboard([...briefMachineStoryboard, newShot]);
                       }}
                       className="w-60 h-full border border-dashed border-zinc-800 flex flex-col items-center justify-center text-zinc-600 hover:text-white hover:border-zinc-600 transition-all flex-shrink-0"
                     >
@@ -3934,7 +4193,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     </button>
                     <div className="flex items-center gap-4">
                       <button 
-                        onClick={exportPromptCraftJSON}
+                        onClick={exportBriefMachineJSON}
                         className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest text-zinc-600 hover:text-zinc-400 transition-all"
                       >
                         <Download size={12} />
@@ -3953,7 +4212,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   </div>
                   <div className="flex items-center gap-4">
                     <span className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">
-                      {promptCraftShot.subject.length} chars
+                      {briefMachineShot.subject.length} chars
                     </span>
                   </div>
                 </div>
@@ -3961,7 +4220,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
 
               {/* Right Panel */}
               <AnimatePresence>
-                {isPromptCraftRightPanelOpen && (
+                {isBriefMachineRightPanelOpen && (
                   <motion.div 
                     initial={{ x: 400 }}
                     animate={{ x: 0 }}
@@ -3998,7 +4257,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                 if (e.key === "Enter") {
                                   const url = (e.target as HTMLInputElement).value;
                                   if (url) {
-                                    setPromptCraftGallery([url, ...promptCraftGallery]);
+                                    setBriefMachineGallery([url, ...briefMachineGallery]);
                                     (e.target as HTMLInputElement).value = "";
                                   }
                                 }
@@ -4012,7 +4271,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                 if (file) {
                                   const reader = new FileReader();
                                   reader.onload = (ev) => {
-                                    if (ev.target?.result) setPromptCraftGallery([ev.target.result as string, ...promptCraftGallery]);
+                                    if (ev.target?.result) setBriefMachineGallery([ev.target.result as string, ...briefMachineGallery]);
                                   };
                                   reader.readAsDataURL(file);
                                 }
@@ -4025,11 +4284,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           "grid gap-4",
                           galleryGridCols === 1 ? "grid-cols-1" : galleryGridCols === 2 ? "grid-cols-2" : "grid-cols-2"
                         )}>
-                          {promptCraftGallery.map((url, i) => (
+                          {briefMachineGallery.map((url, i) => (
                             <div key={i} className="relative aspect-square bg-zinc-900 border border-zinc-800 group overflow-hidden rounded">
                               <img src={url} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
                               <button 
-                                onClick={() => setPromptCraftGallery(prev => prev.filter((_, idx) => idx !== i))}
+                                onClick={() => setBriefMachineGallery(prev => prev.filter((_, idx) => idx !== i))}
                                 className="absolute top-2 right-2 p-1 bg-black/80 text-zinc-500 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"
                               >
                                 <X size={12} />
@@ -4045,11 +4304,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
 
               {/* Toggle Right Panel */}
               <button 
-                onClick={() => setIsPromptCraftRightPanelOpen(!isPromptCraftRightPanelOpen)}
+                onClick={() => setIsBriefMachineRightPanelOpen(!isBriefMachineRightPanelOpen)}
                 className="absolute right-0 top-1/2 -translate-y-1/2 z-50 bg-zinc-900 border border-zinc-800 p-1 text-zinc-500 hover:text-white transition-all"
-                style={{ right: isPromptCraftRightPanelOpen ? "400px" : "0" }}
+                style={{ right: isBriefMachineRightPanelOpen ? "400px" : "0" }}
               >
-                {isPromptCraftRightPanelOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+                {isBriefMachineRightPanelOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
               </button>
             </motion.div>
           )}
@@ -5068,7 +5327,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           </h3>
                           <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest px-2 py-0.5 border border-zinc-800 rounded">
                             {project.frames && project.frames.length > 0 ? "Storyboard" : 
-                             project.prompts && project.prompts.length > 0 ? "Prompt Lab" : 
+                             project.prompts && project.prompts.length > 0 ? "Brief Machine Lab" : 
                              project.extractedFrames && project.extractedFrames.length > 0 ? "Extractor" : "Project"}
                           </span>
                           <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
@@ -5266,7 +5525,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   </button>
                   
                   <div className="space-y-4">
-                    <h2 className="font-display text-5xl text-white italic leading-tight">Welcome to PromptCraft</h2>
+                    <h2 className="font-display text-5xl text-white italic leading-tight">Welcome to Brief Machine</h2>
                     <p className="font-mono text-xs text-[#c87941] uppercase tracking-widest">Professional AI Prompt Engineering Workstation</p>
                   </div>
 
