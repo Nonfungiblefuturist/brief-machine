@@ -46,7 +46,15 @@ import {
   Video,
   Clock,
   LayoutGrid,
-  Play
+  Play,
+  History,
+  Layers,
+  Monitor,
+  ChevronLeft,
+  Maximize2,
+  Grid,
+  Settings,
+  Sparkle
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 
@@ -58,6 +66,16 @@ interface ExtractorFrame {
   backgroundUrl?: string;
   time?: number;
 }
+
+const PROMPTCRAFT_PRESETS = {
+  cameras: ["ARRI Alexa 35", "RED V-RAPTOR", "Sony FX6", "Canon C70", "Blackmagic URSA", "Bolex 16mm", "Super 8 film camera"],
+  lenses: ["anamorphic 50mm", "vintage Helios 44-2", "Cooke S4 35mm", "Zeiss Master Prime 85mm", "tilt-shift lens", "macro lens", "fisheye lens"],
+  filmStocks: ["Kodak Vision3 500T", "Kodak Portra 400", "Fuji Eterna Vivid 500", "CineStill 800T", "Kodak Ektachrome", "Ilford HP5 Plus"],
+  lighting: ["Rembrandt lighting", "golden hour backlight", "harsh midday sun", "neon-lit cyberpunk", "candlelit warmth", "overcast diffused", "blue moonlight", "studio three-point lighting", "chiaroscuro", "volumetric fog with rim light"],
+  styles: ["1970s film grain", "Wes Anderson symmetry", "Blade Runner 2049 neon noir", "Studio Ghibli dreamscape", "Christopher Nolan IMAX", "Terrence Malick golden hour", "Wong Kar-wai neon romance", "A24 indie realism", "Soviet propaganda poster", "renaissance painting"],
+  compositions: ["extreme close-up", "Dutch angle", "bird's eye view", "over-the-shoulder", "symmetrical center frame", "rule of thirds", "leading lines", "deep depth of field", "shallow bokeh", "handheld shaky cam"],
+  motions: ["slow dolly push in", "crane shot rising", "Steadicam tracking shot", "whip pan", "slow motion 120fps", "time-lapse", "drone flyover", "static locked-off", "rack focus pull", "vertigo zoom (dolly zoom)"]
+};
 
 const STORYBOARD_TEMPLATES = [
   {
@@ -204,7 +222,8 @@ For each trend, provide:
 - The emotional undercurrent (what people FEEL about this)
 - A "brief starter" — a provocative question a brand could build a campaign around, specifically for an AI-generated video.
 - A "viral_concept" — A specific, high-impact idea for an AI-generated video that leverages this trend. It should be designed for shareability and visual awe.
-- A "video_hook" — A 3-second hook for social media (TikTok/Reels) to grab attention immediately.`;
+- A "video_hook" — A 3-second hook for social media (TikTok/Reels) to grab attention immediately.
+- The industry category (e.g., Fashion, Tech, Automotive, Food, Travel, Entertainment, etc.)`;
 
 import { 
   auth, 
@@ -223,9 +242,9 @@ import {
   orderBy, 
   deleteDoc, 
   serverTimestamp, 
-  Timestamp,
-  User
+  Timestamp 
 } from './firebase';
+import type { User } from './firebase';
 
 // --- Types ---
 
@@ -331,6 +350,35 @@ interface Trend {
   brief_starter: string;
   viral_concept: string;
   video_hook: string;
+  industry: string;
+}
+
+interface PromptCraftCharacter {
+  id: string;
+  name: string;
+  description: string;
+  wardrobe: string;
+  personality: string;
+  notes: string;
+  initials: string;
+  color: string;
+}
+
+interface PromptCraftShot {
+  id: string;
+  subject: string;
+  composition: string;
+  lighting: string;
+  camera: string;
+  style: string;
+  motion: string;
+  imageUrl?: string;
+}
+
+interface PromptCraftHistoryItem {
+  id: string;
+  timestamp: number;
+  shot: PromptCraftShot;
 }
 
 enum OperationType {
@@ -408,7 +456,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "promptcraft">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [briefInput, setBriefInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
@@ -440,12 +488,43 @@ export default function App() {
   const [isFetchingMoreTrends, setIsFetchingMoreTrends] = useState(false);
   const [pastTrends, setPastTrends] = useState<PastTrend[]>([]);
   const [isLoadingPastTrends, setIsLoadingPastTrends] = useState(false);
+  const [trendFilterMonth, setTrendFilterMonth] = useState<string>("all");
+  const [trendFilterYear, setTrendFilterYear] = useState<string>("all");
+  const [trendFilterIndustry, setTrendFilterIndustry] = useState<string>("all");
   const [videoAspectRatio, setVideoAspectRatio] = useState<"16:9" | "9:16">("16:9");
   const [isExportingImages, setIsExportingImages] = useState(false);
   const [isExportingVideo, setIsExportingVideo] = useState(false);
   const [refiningFrameIndex, setRefiningFrameIndex] = useState<number | null>(null);
   const [refinementFeedback, setRefinementFeedback] = useState("");
+  const [attachedExtractorFrames, setAttachedExtractorFrames] = useState<ExtractorFrame[]>([]);
   const [isMultiShot, setIsMultiShot] = useState(false);
+  
+  // PromptCraft State
+  const [promptCraftShot, setPromptCraftShot] = useState<PromptCraftShot>({
+    id: Date.now().toString(),
+    subject: "",
+    composition: "",
+    lighting: "",
+    camera: "",
+    style: "",
+    motion: ""
+  });
+  const [promptCraftRawInput, setPromptCraftRawInput] = useState("");
+  const [promptCraftCharacters, setPromptCraftCharacters] = useState<PromptCraftCharacter[]>([]);
+  const [promptCraftHistory, setPromptCraftHistory] = useState<PromptCraftHistoryItem[]>([]);
+  const [promptCraftStoryboard, setPromptCraftStoryboard] = useState<PromptCraftShot[]>([]);
+  const [isStoryboardMode, setIsStoryboardMode] = useState(false);
+  const [isPromptCraftSidebarOpen, setIsPromptCraftSidebarOpen] = useState(true);
+  const [isPromptCraftRightPanelOpen, setIsPromptCraftRightPanelOpen] = useState(true);
+  const [promptCraftActiveTab, setPromptCraftActiveTab] = useState<"presets" | "characters" | "history">("presets");
+  const [isBeautifying, setIsBeautifying] = useState(false);
+  const [isSmartEditing, setIsSmartEditing] = useState(false);
+  const [smartEditInstruction, setSmartEditInstruction] = useState("");
+  const [isExpanding, setIsExpanding] = useState(false);
+  const [isSimplifying, setIsSimplifying] = useState(false);
+  const [promptCraftGallery, setPromptCraftGallery] = useState<string[]>([]);
+  const [galleryGridCols, setGalleryGridCols] = useState<1 | 2 | 4>(2);
+  const [showWelcomeModal, setShowWelcomeModal] = useState(false);
   const [higgsfieldModel, setHiggsfieldModel] = useState<string>("Cinema Studio");
   const [clickToAdFields, setClickToAdFields] = useState({
     productUrl: "",
@@ -556,6 +635,314 @@ export default function App() {
       setStoryboarderProjectName(template.name);
       setStoryboarderInput(`Template: ${template.name}\n${template.description}`);
     }
+  };
+
+  const beautifyPrompt = async () => {
+    if (!promptCraftRawInput.trim()) return;
+    setIsBeautifying(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: `You are a professional AI prompt engineer for cinematic image and video generation. Take this unstructured prompt and reorganize it into clean, well-written sections. If a section has no relevant content, leave it empty.
+        
+        RAW INPUT: ${promptCraftRawInput}`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              subject: { type: Type.STRING },
+              composition: { type: Type.STRING },
+              lighting: { type: Type.STRING },
+              camera: { type: Type.STRING },
+              style: { type: Type.STRING },
+              motion: { type: Type.STRING }
+            },
+            required: ["subject", "composition", "lighting", "camera", "style", "motion"]
+          }
+        }
+      });
+      
+      const result = JSON.parse(response.text);
+      setPromptCraftShot(prev => ({ ...prev, ...result }));
+      setPromptCraftRawInput("");
+    } catch (err) {
+      console.error(err);
+      setError("Beautify failed.");
+    } finally {
+      setIsBeautifying(false);
+    }
+  };
+
+  const smartEditPrompt = async (instruction: string) => {
+    if (!instruction.trim()) return;
+    setIsSmartEditing(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: `You are an expert AI prompt editor. Modify the provided structured prompt according to the user's instruction. Keep all sections intact. Only change what the instruction asks for.
+        
+        CURRENT PROMPT:
+        Subject: ${promptCraftShot.subject}
+        Composition: ${promptCraftShot.composition}
+        Lighting: ${promptCraftShot.lighting}
+        Camera: ${promptCraftShot.camera}
+        Style: ${promptCraftShot.style}
+        Motion: ${promptCraftShot.motion}
+        
+        INSTRUCTION: ${instruction}`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              subject: { type: Type.STRING },
+              composition: { type: Type.STRING },
+              lighting: { type: Type.STRING },
+              camera: { type: Type.STRING },
+              style: { type: Type.STRING },
+              motion: { type: Type.STRING }
+            },
+            required: ["subject", "composition", "lighting", "camera", "style", "motion"]
+          }
+        }
+      });
+      
+      const result = JSON.parse(response.text);
+      setPromptCraftShot(prev => ({ ...prev, ...result }));
+      setSmartEditInstruction("");
+    } catch (err) {
+      console.error(err);
+      setError("Smart Edit failed.");
+    } finally {
+      setIsSmartEditing(false);
+    }
+  };
+
+  const expandPrompt = async () => {
+    setIsExpanding(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: `Add more cinematic detail and richness to each section of this prompt while preserving the original creative intent. Make it more vivid and specific.
+        
+        CURRENT PROMPT:
+        Subject: ${promptCraftShot.subject}
+        Composition: ${promptCraftShot.composition}
+        Lighting: ${promptCraftShot.lighting}
+        Camera: ${promptCraftShot.camera}
+        Style: ${promptCraftShot.style}
+        Motion: ${promptCraftShot.motion}`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              subject: { type: Type.STRING },
+              composition: { type: Type.STRING },
+              lighting: { type: Type.STRING },
+              camera: { type: Type.STRING },
+              style: { type: Type.STRING },
+              motion: { type: Type.STRING }
+            },
+            required: ["subject", "composition", "lighting", "camera", "style", "motion"]
+          }
+        }
+      });
+      
+      const result = JSON.parse(response.text);
+      setPromptCraftShot(prev => ({ ...prev, ...result }));
+    } catch (err) {
+      console.error(err);
+      setError("Expand failed.");
+    } finally {
+      setIsExpanding(false);
+    }
+  };
+
+  const simplifyPrompt = async () => {
+    setIsSimplifying(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const response = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview",
+        contents: `Strip this prompt down to only its most essential elements. Remove unnecessary detail. Make it clean and minimal.
+        
+        CURRENT PROMPT:
+        Subject: ${promptCraftShot.subject}
+        Composition: ${promptCraftShot.composition}
+        Lighting: ${promptCraftShot.lighting}
+        Camera: ${promptCraftShot.camera}
+        Style: ${promptCraftShot.style}
+        Motion: ${promptCraftShot.motion}`,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              subject: { type: Type.STRING },
+              composition: { type: Type.STRING },
+              lighting: { type: Type.STRING },
+              camera: { type: Type.STRING },
+              style: { type: Type.STRING },
+              motion: { type: Type.STRING }
+            },
+            required: ["subject", "composition", "lighting", "camera", "style", "motion"]
+          }
+        }
+      });
+      
+      const result = JSON.parse(response.text);
+      setPromptCraftShot(prev => ({ ...prev, ...result }));
+    } catch (err) {
+      console.error(err);
+      setError("Simplify failed.");
+    } finally {
+      setIsSimplifying(false);
+    }
+  };
+
+  const rollPrompt = () => {
+    const getRandom = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+    setPromptCraftShot({
+      id: Date.now().toString(),
+      subject: "A mysterious figure in a futuristic city",
+      composition: getRandom(PROMPTCRAFT_PRESETS.compositions),
+      lighting: getRandom(PROMPTCRAFT_PRESETS.lighting),
+      camera: getRandom(PROMPTCRAFT_PRESETS.cameras),
+      style: getRandom(PROMPTCRAFT_PRESETS.styles),
+      motion: getRandom(PROMPTCRAFT_PRESETS.motions)
+    });
+  };
+
+  const saveToHistory = () => {
+    const newItem: PromptCraftHistoryItem = {
+      id: Date.now().toString(),
+      timestamp: Date.now(),
+      shot: { ...promptCraftShot }
+    };
+    const updatedHistory = [newItem, ...promptCraftHistory].slice(0, 50);
+    setPromptCraftHistory(updatedHistory);
+    localStorage.setItem("promptcraft_history", JSON.stringify(updatedHistory));
+  };
+
+  const copyFullPrompt = () => {
+    const full = `${promptCraftShot.subject}. ${promptCraftShot.composition}. ${promptCraftShot.lighting}. ${promptCraftShot.camera}. ${promptCraftShot.style}. ${promptCraftShot.motion}.`.replace(/\.\s\./g, ".").trim();
+    navigator.clipboard.writeText(full);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+    saveToHistory();
+  };
+
+  const clearPrompt = () => {
+    setPromptCraftShot({
+      id: Date.now().toString(),
+      subject: "",
+      composition: "",
+      lighting: "",
+      camera: "",
+      style: "",
+      motion: ""
+    });
+  };
+
+  const addCharacter = (char: Omit<PromptCraftCharacter, "id" | "initials" | "color">) => {
+    const initials = char.name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2);
+    const colors = ["#c87941", "#41c879", "#4179c8", "#c84179", "#7941c8"];
+    const color = colors[promptCraftCharacters.length % colors.length];
+    const newChar: PromptCraftCharacter = {
+      ...char,
+      id: Date.now().toString(),
+      initials,
+      color
+    };
+    const updated = [...promptCraftCharacters, newChar];
+    setPromptCraftCharacters(updated);
+    localStorage.setItem("promptcraft_characters", JSON.stringify(updated));
+  };
+
+  const deleteCharacter = (id: string) => {
+    const updated = promptCraftCharacters.filter(c => c.id !== id);
+    setPromptCraftCharacters(updated);
+    localStorage.setItem("promptcraft_characters", JSON.stringify(updated));
+  };
+
+  const insertCharacter = (char: PromptCraftCharacter) => {
+    setPromptCraftShot(prev => ({
+      ...prev,
+      subject: prev.subject ? `${prev.subject}, ${char.description} wearing ${char.wardrobe}` : `${char.name}: ${char.description} wearing ${char.wardrobe}`
+    }));
+  };
+
+  useEffect(() => {
+    const savedHistory = localStorage.getItem("promptcraft_history");
+    if (savedHistory) setPromptCraftHistory(JSON.parse(savedHistory));
+    
+    const savedChars = localStorage.getItem("promptcraft_characters");
+    if (savedChars) setPromptCraftCharacters(JSON.parse(savedChars));
+
+    const firstVisit = !localStorage.getItem("promptcraft_visited");
+    if (firstVisit) {
+      setShowWelcomeModal(true);
+      localStorage.setItem("promptcraft_visited", "true");
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (view !== "promptcraft") return;
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        copyFullPrompt();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+        beautifyPrompt();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "e") {
+        setSmartEditInstruction(""); // Open modal logic would go here
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        saveToHistory();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [view, promptCraftShot, promptCraftRawInput]);
+
+  const exportPromptCraftJSON = () => {
+    const data = {
+      history: promptCraftHistory,
+      storyboard: promptCraftStoryboard,
+      characters: promptCraftCharacters
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `PromptCraft_Export_${Date.now()}.json`;
+    a.click();
+  };
+
+  const exportStoryboardText = () => {
+    let text = "PROMPTCRAFT STORYBOARD EXPORT\n\n";
+    promptCraftStoryboard.forEach((shot, i) => {
+      text += `SHOT ${i + 1}\n`;
+      text += `Subject: ${shot.subject}\n`;
+      text += `Composition: ${shot.composition}\n`;
+      text += `Lighting: ${shot.lighting}\n`;
+      text += `Camera: ${shot.camera}\n`;
+      text += `Style: ${shot.style}\n`;
+      text += `Motion: ${shot.motion}\n`;
+      text += `-----------------------------------\n\n`;
+    });
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `Storyboard_Export_${Date.now()}.txt`;
+    a.click();
   };
 
   const saveStoryboard = async () => {
@@ -687,9 +1074,14 @@ export default function App() {
         .join("\n- ");
 
       // Combined prompt for Strategic Foundation, 3 Deep Concepts, and 5 Quick Provocations
+      const visualContext = attachedExtractorFrames.length > 0 
+        ? `\nVISUAL REFERENCES ATTACHED (${attachedExtractorFrames.length} frames):
+           ${attachedExtractorFrames.map((f, i) => `Frame ${i+1}: ${f.name || 'Unnamed'} at ${f.time.toFixed(2)}s`).join('\n')}`
+        : "";
+
       const response = await ai.models.generateContent({
         model: "gemini-3.1-pro-preview",
-        contents: `USER BRIEF / INPUT: ${briefInput}
+        contents: `USER BRIEF / INPUT: ${briefInput}${visualContext}
 TARGET VIDEO LENGTH: ${videoLength}
 INSPIRATION MODE: ${inspiration.toUpperCase()}
 MODE: ${mode === "surreal" ? "SURREAL AI (Impossible Scenarios)" : "STANDARD STRATEGY"}
@@ -1022,10 +1414,9 @@ Think D&AD. Think Cannes.`,
   };
 
   const sendFrameToEngine = (frame: ExtractorFrame | ExtractorFrame[]) => {
-    const frameCount = Array.isArray(frame) ? frame.length : 1;
-    setBriefInput(`Concept inspired by ${frameCount > 1 ? "these visual references" : "this visual reference"}: [Visual Reference Attached]`);
-    // In a real app we might attach the image to the state, 
-    // but for now we'll just set the view and the input.
+    const frames = Array.isArray(frame) ? frame : [frame];
+    setAttachedExtractorFrames(frames);
+    setBriefInput(`Concept inspired by ${frames.length > 1 ? "these visual references" : "this visual reference"}: [Visual Reference Attached]`);
     setView("input");
   };
 
@@ -2081,32 +2472,84 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             Feed it a brand. Get back ideas that win. Powered by the same creative philosophy that wins D&AD Black Pencils.
           </motion.p>
 
-          <nav className="flex flex-wrap gap-2 mt-8">
+          <nav className="flex flex-wrap gap-4 mt-8">
             {[
-              { id: "input", label: "Creative Engine", icon: Zap },
-              { id: "trends", label: "Trend Scanner", icon: Search, action: fetchTrends },
-              { id: "storyboarder", label: "Auto Storyboarder", icon: Layout },
-              { id: "extractor", label: "Frame Extractor", icon: Scissors },
-              { id: "projects", label: "Saved Projects", icon: Folder, action: user ? () => { fetchSavedProjects(user.uid); setView("projects"); } : undefined },
-              { id: "shortlist", label: "Shortlist", icon: Check },
-              { id: "pastTrends", label: "Past Trends", icon: Clock, action: user ? fetchPastTrends : undefined },
-              { id: "prompt", label: "Prompt DNA", icon: Code },
-            ].map((item) => (
-              <button
-                key={item.id}
-                disabled={item.id === "projects" && !user}
-                onClick={() => item.action ? item.action() : setView(item.id as any)}
-                className={cn(
-                  "font-mono text-[10px] uppercase tracking-widest px-4 py-2 border transition-all flex items-center gap-2",
-                  (view === item.id || (item.id === "input" && view === "results"))
-                    ? "bg-white text-black border-white"
-                    : "bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300",
-                  item.id === "projects" && !user && "opacity-30 cursor-not-allowed"
+              { 
+                id: "trends_group", 
+                label: "Intelligence", 
+                icon: Search, 
+                active: view === "trends" || view === "pastTrends",
+                subItems: [
+                  { id: "trends", label: "Scanner", action: fetchTrends },
+                  { id: "pastTrends", label: "Archive", action: fetchPastTrends }
+                ]
+              },
+              { 
+                id: "engine_group", 
+                label: "Engine", 
+                icon: Zap, 
+                active: view === "input" || view === "results" || view === "prompt",
+                subItems: [
+                  { id: "input", label: "Concepts" },
+                  { id: "prompt", label: "DNA" }
+                ]
+              },
+              { 
+                id: "studio_group", 
+                label: "Studio", 
+                icon: Layout, 
+                active: view === "storyboarder" || view === "extractor" || view === "promptcraft",
+                subItems: [
+                  { id: "storyboarder", label: "Storyboard" },
+                  { id: "extractor", label: "Extractor" },
+                  { id: "promptcraft", label: "PromptCraft" }
+                ]
+              },
+              { 
+                id: "library_group", 
+                label: "Library", 
+                icon: Folder, 
+                active: view === "projects" || view === "shortlist",
+                subItems: [
+                  { id: "projects", label: "Projects", action: user ? () => { fetchSavedProjects(user.uid); setView("projects"); } : undefined },
+                  { id: "shortlist", label: "Shortlist" }
+                ]
+              },
+            ].map((group) => (
+              <div key={group.id} className="flex flex-col gap-2">
+                <button
+                  onClick={() => {
+                    const firstSub = group.subItems[0];
+                    if (firstSub.action) firstSub.action();
+                    else setView(firstSub.id as any);
+                  }}
+                  className={cn(
+                    "font-mono text-[10px] uppercase tracking-widest px-6 py-3 border transition-all flex items-center gap-3",
+                    group.active ? "bg-white text-black border-white" : "bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300"
+                  )}
+                >
+                  <group.icon size={14} />
+                  {group.label}
+                </button>
+                {group.active && (
+                  <div className="flex gap-2 px-1">
+                    {group.subItems.map(item => (
+                      <button
+                        key={item.id}
+                        disabled={item.id === "projects" && !user}
+                        onClick={() => item.action ? item.action() : setView(item.id as any)}
+                        className={cn(
+                          "font-mono text-[8px] uppercase tracking-widest py-1 px-2 transition-all border-b-2",
+                          view === item.id ? "border-white text-white" : "border-transparent text-zinc-600 hover:text-zinc-400",
+                          item.id === "projects" && !user && "opacity-30 cursor-not-allowed"
+                        )}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
                 )}
-              >
-                <item.icon size={12} />
-                {item.label}
-              </button>
+              </div>
             ))}
           </nav>
         </header>
@@ -2202,6 +2645,45 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   </div>
                 </div>
               </div>
+
+              {/* Attached Frames from Extractor */}
+              {attachedExtractorFrames.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
+                      Attached Visual References ({attachedExtractorFrames.length})
+                    </label>
+                    <button 
+                      onClick={() => setAttachedExtractorFrames([])}
+                      className="font-mono text-[8px] text-red-500 hover:text-red-400 uppercase tracking-widest"
+                    >
+                      Remove All
+                    </button>
+                  </div>
+                  <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
+                    {attachedExtractorFrames.map((frame, i) => (
+                      <div key={i} className="relative w-48 aspect-video flex-shrink-0 border border-zinc-800 group">
+                        <img src={frame.url} className="w-full h-full object-cover" />
+                        {frame.backgroundUrl && (
+                          <div className="absolute inset-0 z-10">
+                            <img src={frame.backgroundUrl} className="w-full h-full object-cover opacity-50 mix-blend-overlay" />
+                          </div>
+                        )}
+                        <div className="absolute bottom-0 left-0 w-full p-2 bg-black/80 font-mono text-[8px] text-white border-t border-zinc-800 z-20 flex justify-between items-center">
+                          <span className="truncate max-w-[100px]">{frame.name || `Frame ${i+1}`}</span>
+                          <span>{frame.time.toFixed(1)}s</span>
+                        </div>
+                        <button 
+                          onClick={() => setAttachedExtractorFrames(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute top-2 right-2 w-6 h-6 bg-black/80 border border-zinc-800 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity z-30"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-4">
                 <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
@@ -2840,7 +3322,488 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             )}
           </AnimatePresence>
 
-          {/* STORYBOARDER VIEW */}
+          {/* PROMPTCRAFT VIEW */}
+          {view === "promptcraft" && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="fixed inset-0 top-[88px] bg-[#0a1628] text-[#e0e0e0] z-40 flex overflow-hidden font-sans"
+            >
+              {/* Left Sidebar */}
+              <AnimatePresence>
+                {isPromptCraftSidebarOpen && (
+                  <motion.div 
+                    initial={{ x: -300 }}
+                    animate={{ x: 0 }}
+                    exit={{ x: -300 }}
+                    className="w-[300px] border-r border-zinc-800 flex flex-col bg-[#0a1628]"
+                  >
+                    <div className="flex border-b border-zinc-800">
+                      <button 
+                        onClick={() => setPromptCraftActiveTab("presets")}
+                        className={cn(
+                          "flex-1 py-4 font-mono text-[10px] uppercase tracking-widest border-b-2 transition-all",
+                          promptCraftActiveTab === "presets" ? "border-[#c87941] text-[#c87941]" : "border-transparent text-zinc-500 hover:text-zinc-300"
+                        )}
+                      >
+                        Presets
+                      </button>
+                      <button 
+                        onClick={() => setPromptCraftActiveTab("characters")}
+                        className={cn(
+                          "flex-1 py-4 font-mono text-[10px] uppercase tracking-widest border-b-2 transition-all",
+                          promptCraftActiveTab === "characters" ? "border-[#c87941] text-[#c87941]" : "border-transparent text-zinc-500 hover:text-zinc-300"
+                        )}
+                      >
+                        Studio
+                      </button>
+                      <button 
+                        onClick={() => setPromptCraftActiveTab("history")}
+                        className={cn(
+                          "flex-1 py-4 font-mono text-[10px] uppercase tracking-widest border-b-2 transition-all",
+                          promptCraftActiveTab === "history" ? "border-[#c87941] text-[#c87941]" : "border-transparent text-zinc-500 hover:text-zinc-300"
+                        )}
+                      >
+                        History
+                      </button>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
+                      {promptCraftActiveTab === "presets" && (
+                        <div className="space-y-4">
+                          {Object.entries(PROMPTCRAFT_PRESETS).map(([category, items]) => (
+                            <details key={category} className="group" open>
+                              <summary className="flex items-center justify-between cursor-pointer py-2 border-b border-zinc-900">
+                                <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">{category}</span>
+                                <ChevronRight size={12} className="text-zinc-600 group-open:rotate-90 transition-transform" />
+                              </summary>
+                              <div className="grid grid-cols-1 gap-1 mt-2">
+                                {items.map(item => (
+                                  <button 
+                                    key={item}
+                                    onClick={() => {
+                                      const key = category === "cameras" ? "camera" : 
+                                                  category === "lenses" ? "camera" :
+                                                  category === "filmStocks" ? "camera" :
+                                                  category.slice(0, -1) as keyof PromptCraftShot;
+                                      
+                                      setPromptCraftShot(prev => {
+                                        let val = prev[key as keyof PromptCraftShot] || "";
+                                        if (category === "cameras" || category === "lenses" || category === "filmStocks") {
+                                          val = val ? `${val}, ${item}` : item;
+                                          return { ...prev, camera: val };
+                                        }
+                                        return { ...prev, [key]: item };
+                                      });
+                                    }}
+                                    className="text-left py-2 px-3 text-[11px] text-zinc-500 hover:bg-zinc-900 hover:text-white transition-all rounded"
+                                  >
+                                    {item}
+                                  </button>
+                                ))}
+                              </div>
+                            </details>
+                          ))}
+                        </div>
+                      )}
+
+                      {promptCraftActiveTab === "characters" && (
+                        <div className="space-y-6">
+                          <button 
+                            onClick={() => {
+                              const name = prompt("Character Name?");
+                              if (name) addCharacter({ name, description: "", wardrobe: "", personality: "", notes: "" });
+                            }}
+                            className="w-full py-3 border border-dashed border-zinc-800 text-zinc-500 font-mono text-[10px] uppercase tracking-widest hover:border-zinc-600 hover:text-white transition-all flex items-center justify-center gap-2"
+                          >
+                            <Plus size={12} />
+                            New Character
+                          </button>
+                          
+                          <div className="space-y-4">
+                            {promptCraftCharacters.map(char => (
+                              <div key={char.id} className="bg-zinc-900/50 border border-zinc-800 p-4 rounded-lg space-y-3 group">
+                                <div className="flex items-center gap-3">
+                                  <div 
+                                    className="w-8 h-8 rounded-full flex items-center justify-center font-mono text-[10px] text-white"
+                                    style={{ backgroundColor: char.color }}
+                                  >
+                                    {char.initials}
+                                  </div>
+                                  <div className="flex-1">
+                                    <h4 className="text-xs font-bold text-white">{char.name}</h4>
+                                    <p className="text-[10px] text-zinc-500 truncate">{char.description}</p>
+                                  </div>
+                                  <button 
+                                    onClick={() => deleteCharacter(char.id)}
+                                    className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-500 transition-all"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                                <button 
+                                  onClick={() => insertCharacter(char)}
+                                  className="w-full py-2 bg-zinc-800 text-zinc-300 font-mono text-[9px] uppercase tracking-widest hover:bg-zinc-700 transition-all"
+                                >
+                                  Insert into Prompt
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {promptCraftActiveTab === "history" && (
+                        <div className="space-y-3">
+                          {promptCraftHistory.map(item => (
+                            <button 
+                              key={item.id}
+                              onClick={() => setPromptCraftShot(item.shot)}
+                              className="w-full text-left p-3 bg-zinc-900/30 border border-zinc-800 hover:border-zinc-600 transition-all rounded group"
+                            >
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
+                                  {new Date(item.timestamp).toLocaleTimeString()}
+                                </span>
+                                <Trash2 
+                                  size={10} 
+                                  className="opacity-0 group-hover:opacity-100 text-zinc-700 hover:text-red-500" 
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const updated = promptCraftHistory.filter(h => h.id !== item.id);
+                                    setPromptCraftHistory(updated);
+                                    localStorage.setItem("promptcraft_history", JSON.stringify(updated));
+                                  }}
+                                />
+                              </div>
+                              <p className="text-[10px] text-zinc-400 line-clamp-2">{item.shot.subject}</p>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Toggle Sidebar */}
+              <button 
+                onClick={() => setIsPromptCraftSidebarOpen(!isPromptCraftSidebarOpen)}
+                className="absolute left-0 top-1/2 -translate-y-1/2 z-50 bg-zinc-900 border border-zinc-800 p-1 text-zinc-500 hover:text-white transition-all"
+                style={{ left: isPromptCraftSidebarOpen ? "300px" : "0" }}
+              >
+                {isPromptCraftSidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
+              </button>
+
+              {/* Main Area */}
+              <div className="flex-1 flex flex-col bg-[#0a1628] overflow-hidden">
+                {/* Toolbar */}
+                <div className="h-[60px] border-b border-zinc-800 flex items-center justify-between px-6 bg-[#0a1628]/80 backdrop-blur-md z-30">
+                  <div className="flex items-center gap-4">
+                    <h1 className="font-display text-xl text-white italic tracking-tight">PromptCraft</h1>
+                    <div className="h-4 w-[1px] bg-zinc-800" />
+                    <div className="flex items-center gap-2">
+                      <button 
+                        onClick={beautifyPrompt}
+                        disabled={isBeautifying}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {isBeautifying ? <RefreshCcw size={12} className="animate-spin" /> : <Sparkles size={12} className="text-[#c87941]" />}
+                        Beautify
+                      </button>
+                      <button 
+                        onClick={() => {
+                          const inst = prompt("Smart Edit Instruction? (e.g. 'make it more dramatic')");
+                          if (inst) smartEditPrompt(inst);
+                        }}
+                        disabled={isSmartEditing}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {isSmartEditing ? <RefreshCcw size={12} className="animate-spin" /> : <Code size={12} className="text-cyan-500" />}
+                        Smart Edit
+                      </button>
+                      <button 
+                        onClick={expandPrompt}
+                        disabled={isExpanding}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {isExpanding ? <RefreshCcw size={12} className="animate-spin" /> : <Maximize2 size={12} className="text-purple-500" />}
+                        Expand
+                      </button>
+                      <button 
+                        onClick={simplifyPrompt}
+                        disabled={isSimplifying}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest disabled:opacity-50"
+                      >
+                        {isSimplifying ? <RefreshCcw size={12} className="animate-spin" /> : <Minus size={12} className="text-zinc-500" />}
+                        Simplify
+                      </button>
+                      <button 
+                        onClick={rollPrompt}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-600 transition-all rounded font-mono text-[10px] uppercase tracking-widest"
+                      >
+                        <RefreshCcw size={12} className="text-orange-500" />
+                        Roll
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button 
+                      onClick={copyFullPrompt}
+                      className="flex items-center gap-2 px-4 py-2 bg-[#c87941] text-white hover:bg-[#b06a38] transition-all rounded font-mono text-[10px] uppercase tracking-widest shadow-lg shadow-[#c87941]/20"
+                    >
+                      {copied ? <Check size={14} /> : <Copy size={14} />}
+                      {copied ? "Copied" : "Copy Prompt"}
+                    </button>
+                    <button 
+                      onClick={clearPrompt}
+                      className="p-2 text-zinc-600 hover:text-red-500 transition-all"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Editor Content */}
+                <div className="flex-1 overflow-y-auto p-8 scrollbar-hide">
+                  <div className="max-w-4xl mx-auto space-y-10">
+                    {/* Raw Input */}
+                    <div className="space-y-3">
+                      <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">Raw Input / Paste Area</label>
+                      <textarea 
+                        value={promptCraftRawInput}
+                        onChange={(e) => setPromptCraftRawInput(e.target.value)}
+                        placeholder="Paste messy text here and click 'Beautify'..."
+                        className="w-full bg-black/30 border border-zinc-800 p-4 text-zinc-300 font-mono text-xs focus:border-[#c87941] focus:outline-none transition-all min-h-[80px] resize-none"
+                      />
+                    </div>
+
+                    {/* Structured Sections */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                      {[
+                        { key: "subject", label: "Subject", color: "text-white", accent: "border-white" },
+                        { key: "composition", label: "Composition", color: "text-cyan-400", accent: "border-cyan-900" },
+                        { key: "lighting", label: "Lighting", color: "text-orange-400", accent: "border-orange-900" },
+                        { key: "camera", label: "Camera", color: "text-purple-400", accent: "border-purple-900" },
+                        { key: "style", label: "Style", color: "text-emerald-400", accent: "border-emerald-900" },
+                        { key: "motion", label: "Motion", color: "text-pink-400", accent: "border-pink-900" }
+                      ].map(section => (
+                        <div key={section.key} className="space-y-3">
+                          <label className={cn("font-mono text-[10px] uppercase tracking-widest block", section.color)}>
+                            {section.label}
+                          </label>
+                          <textarea 
+                            value={promptCraftShot[section.key as keyof PromptCraftShot] || ""}
+                            onChange={(e) => setPromptCraftShot(prev => ({ ...prev, [section.key]: e.target.value }))}
+                            className={cn(
+                              "w-full bg-black/20 border p-4 text-zinc-200 font-sans text-sm focus:outline-none transition-all min-h-[100px] resize-none",
+                              section.accent,
+                              "focus:border-[#c87941]"
+                            )}
+                            placeholder={`Describe ${section.label.toLowerCase()}...`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Preview Area */}
+                    <div className="bg-black/40 border border-zinc-800 p-8 rounded-lg space-y-6">
+                      <div className="flex justify-between items-center">
+                        <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">Full Prompt Preview</label>
+                        <button 
+                          onClick={copyFullPrompt}
+                          className="text-zinc-500 hover:text-white transition-all"
+                        >
+                          <Copy size={14} />
+                        </button>
+                      </div>
+                      <div className="font-mono text-sm leading-relaxed">
+                        <span className="text-white">{promptCraftShot.subject}</span>
+                        {promptCraftShot.composition && <span className="text-cyan-400">. {promptCraftShot.composition}</span>}
+                        {promptCraftShot.lighting && <span className="text-orange-400">. {promptCraftShot.lighting}</span>}
+                        {promptCraftShot.camera && <span className="text-purple-400">. {promptCraftShot.camera}</span>}
+                        {promptCraftShot.style && <span className="text-emerald-400">. {promptCraftShot.style}</span>}
+                        {promptCraftShot.motion && <span className="text-pink-400">. {promptCraftShot.motion}</span>}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Storyboard Mode Strip */}
+                {isStoryboardMode && (
+                  <div className="h-[180px] border-t border-zinc-800 bg-black/50 p-4 flex gap-4 overflow-x-auto scrollbar-hide">
+                    {promptCraftStoryboard.map((shot, i) => (
+                      <div 
+                        key={i}
+                        onClick={() => setPromptCraftShot(shot)}
+                        className={cn(
+                          "w-60 h-full bg-zinc-900 border flex-shrink-0 cursor-pointer group relative overflow-hidden",
+                          promptCraftShot.id === shot.id ? "border-[#c87941]" : "border-zinc-800 hover:border-zinc-600"
+                        )}
+                      >
+                        <div className="absolute top-2 left-2 z-10 bg-black/80 px-2 py-0.5 rounded font-mono text-[8px] text-white">
+                          Shot {i + 1}
+                        </div>
+                        {shot.imageUrl ? (
+                          <img src={shot.imageUrl} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-zinc-800">
+                            <ImageIcon size={32} />
+                          </div>
+                        )}
+                        <div className="absolute bottom-0 left-0 w-full p-2 bg-black/80 border-t border-zinc-800">
+                          <p className="text-[9px] text-zinc-400 line-clamp-1 font-mono">{shot.subject}</p>
+                        </div>
+                      </div>
+                    ))}
+                    <button 
+                      onClick={() => {
+                        const newShot = { ...promptCraftShot, id: Date.now().toString() };
+                        setPromptCraftStoryboard([...promptCraftStoryboard, newShot]);
+                      }}
+                      className="w-60 h-full border border-dashed border-zinc-800 flex flex-col items-center justify-center text-zinc-600 hover:text-white hover:border-zinc-600 transition-all flex-shrink-0"
+                    >
+                      <Plus size={24} />
+                      <span className="font-mono text-[10px] uppercase tracking-widest mt-2">Add Shot</span>
+                    </button>
+                  </div>
+                )}
+
+                {/* Bottom Bar */}
+                <div className="h-[40px] border-t border-zinc-800 bg-[#0a1628] flex items-center justify-between px-6">
+                  <div className="flex items-center gap-6">
+                    <button 
+                      onClick={() => setIsStoryboardMode(!isStoryboardMode)}
+                      className={cn(
+                        "flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest transition-all",
+                        isStoryboardMode ? "text-[#c87941]" : "text-zinc-600 hover:text-zinc-400"
+                      )}
+                    >
+                      <Layout size={12} />
+                      Storyboard Mode
+                    </button>
+                    <div className="flex items-center gap-4">
+                      <button 
+                        onClick={exportPromptCraftJSON}
+                        className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest text-zinc-600 hover:text-zinc-400 transition-all"
+                      >
+                        <Download size={12} />
+                        Export JSON
+                      </button>
+                      {isStoryboardMode && (
+                        <button 
+                          onClick={exportStoryboardText}
+                          className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-widest text-zinc-600 hover:text-zinc-400 transition-all"
+                        >
+                          <FileImage size={12} />
+                          Export Storyboard
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">
+                      {promptCraftShot.subject.length} chars
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Panel */}
+              <AnimatePresence>
+                {isPromptCraftRightPanelOpen && (
+                  <motion.div 
+                    initial={{ x: 400 }}
+                    animate={{ x: 0 }}
+                    exit={{ x: 400 }}
+                    className="w-[400px] border-l border-zinc-800 flex flex-col bg-[#0a1628]"
+                  >
+                    <div className="h-[60px] border-b border-zinc-800 flex items-center justify-between px-6">
+                      <span className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">Gallery / Preview</span>
+                      <div className="flex items-center gap-2">
+                        {[1, 2, 4].map(cols => (
+                          <button 
+                            key={cols}
+                            onClick={() => setGalleryGridCols(cols as any)}
+                            className={cn(
+                              "p-1.5 transition-all",
+                              galleryGridCols === cols ? "text-[#c87941]" : "text-zinc-600 hover:text-zinc-400"
+                            )}
+                          >
+                            {cols === 1 ? <Layout size={14} /> : cols === 2 ? <Grid size={14} /> : <LayoutGrid size={14} />}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+                      <div className="space-y-6">
+                        <div className="space-y-3">
+                          <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">Add to Gallery</label>
+                          <div className="flex gap-2">
+                            <input 
+                              type="text"
+                              placeholder="Paste image URL..."
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  const url = (e.target as HTMLInputElement).value;
+                                  if (url) {
+                                    setPromptCraftGallery([url, ...promptCraftGallery]);
+                                    (e.target as HTMLInputElement).value = "";
+                                  }
+                                }
+                              }}
+                              className="flex-1 bg-black/30 border border-zinc-800 p-2 text-zinc-300 font-mono text-[10px] focus:border-[#c87941] focus:outline-none transition-all"
+                            />
+                            <label className="p-2 bg-zinc-900 border border-zinc-800 text-zinc-500 hover:text-white transition-all cursor-pointer">
+                              <Plus size={14} />
+                              <input type="file" className="hidden" onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onload = (ev) => {
+                                    if (ev.target?.result) setPromptCraftGallery([ev.target.result as string, ...promptCraftGallery]);
+                                  };
+                                  reader.readAsDataURL(file);
+                                }
+                              }} />
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className={cn(
+                          "grid gap-4",
+                          galleryGridCols === 1 ? "grid-cols-1" : galleryGridCols === 2 ? "grid-cols-2" : "grid-cols-2"
+                        )}>
+                          {promptCraftGallery.map((url, i) => (
+                            <div key={i} className="relative aspect-square bg-zinc-900 border border-zinc-800 group overflow-hidden rounded">
+                              <img src={url} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" />
+                              <button 
+                                onClick={() => setPromptCraftGallery(prev => prev.filter((_, idx) => idx !== i))}
+                                className="absolute top-2 right-2 p-1 bg-black/80 text-zinc-500 opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all"
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Toggle Right Panel */}
+              <button 
+                onClick={() => setIsPromptCraftRightPanelOpen(!isPromptCraftRightPanelOpen)}
+                className="absolute right-0 top-1/2 -translate-y-1/2 z-50 bg-zinc-900 border border-zinc-800 p-1 text-zinc-500 hover:text-white transition-all"
+                style={{ right: isPromptCraftRightPanelOpen ? "400px" : "0" }}
+              >
+                {isPromptCraftRightPanelOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+              </button>
+            </motion.div>
+          )}
           {view === "storyboarder" && (
             <motion.div 
               initial={{ opacity: 0 }}
@@ -3154,20 +4117,20 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     ))}
                   </div>
                 </div>
-
-                <div className="flex justify-center pt-8" data-html2canvas-ignore="true">
-                  <button 
-                    onClick={addStoryboardFrame}
-                    className="font-mono text-[10px] uppercase tracking-widest px-8 py-4 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
-                  >
-                    <Plus size={12} />
-                    Add New Shot
-                  </button>
-                </div>
               </div>
             )}
-            </motion.div>
-          )}
+
+            <div className="flex justify-center pt-8" data-html2canvas-ignore="true">
+              <button 
+                onClick={addStoryboardFrame}
+                className="font-mono text-[10px] uppercase tracking-widest px-8 py-4 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2"
+              >
+                <Plus size={12} />
+                Add New Shot
+              </button>
+            </div>
+          </motion.div>
+        )}
 
           {/* PROMPT DNA VIEW */}
           {view === "prompt" && (
@@ -3245,16 +4208,26 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                               className="w-full accent-white h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer relative z-10"
                             />
                             {/* Frame Markers */}
-                            <div className="absolute inset-0 pointer-events-none">
+                            <div className="absolute inset-0">
                               {extractorFrames.map((frame, i) => (
-                                <div 
+                                <button 
                                   key={i}
+                                  onClick={() => {
+                                    setSelectedExtractorFrames(prev => 
+                                      prev.includes(i) ? prev.filter(id => id !== i) : [...prev, i]
+                                    );
+                                    setExtractorScrubTime(frame.time);
+                                    if (extractorVideoRef.current) {
+                                      extractorVideoRef.current.currentTime = frame.time;
+                                    }
+                                  }}
                                   className={cn(
-                                    "absolute top-1/2 -translate-y-1/2 w-1 h-3 transition-all",
-                                    selectedExtractorFrames.includes(i) ? "bg-cyan-500 h-4 z-20" : "bg-zinc-600"
+                                    "absolute top-1/2 -translate-y-1/2 w-2 h-4 transition-all cursor-pointer z-20 hover:scale-125",
+                                    selectedExtractorFrames.includes(i) ? "bg-cyan-500 h-6" : "bg-zinc-600 hover:bg-zinc-400"
                                   )}
                                   style={{ 
-                                    left: `${(frame.time / (extractorVideoRef.current?.duration || 1)) * 100}%` 
+                                    left: `${(frame.time / (extractorVideoRef.current?.duration || 1)) * 100}%`,
+                                    transform: 'translate(-50%, -50%)'
                                   }}
                                 />
                               ))}
@@ -3823,10 +4796,52 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               animate={{ opacity: 1 }}
               className="space-y-12"
             >
-              <div className="flex justify-between items-end border-b border-zinc-800 pb-10">
+              <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-zinc-800 pb-10 gap-6">
                 <div className="space-y-2">
                   <h2 className="font-display text-5xl text-white italic">Trend Archive</h2>
                   <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Historical context for current creative strategies</p>
+                </div>
+                
+                <div className="flex gap-4">
+                  <div className="space-y-2">
+                    <label className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest block">Filter by Month</label>
+                    <select 
+                      value={trendFilterMonth}
+                      onChange={(e) => setTrendFilterMonth(e.target.value)}
+                      className="bg-black border border-zinc-800 text-zinc-400 font-mono text-[10px] p-2 focus:outline-none focus:border-zinc-600"
+                    >
+                      <option value="all">All Months</option>
+                      {["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((m, i) => (
+                        <option key={m} value={i.toString()}>{m}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest block">Filter by Year</label>
+                    <select 
+                      value={trendFilterYear}
+                      onChange={(e) => setTrendFilterYear(e.target.value)}
+                      className="bg-black border border-zinc-800 text-zinc-400 font-mono text-[10px] p-2 focus:outline-none focus:border-zinc-600"
+                    >
+                      <option value="all">All Years</option>
+                      {["2024", "2025", "2026"].map(y => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest block">Filter by Industry</label>
+                    <select 
+                      value={trendFilterIndustry}
+                      onChange={(e) => setTrendFilterIndustry(e.target.value)}
+                      className="bg-black border border-zinc-800 text-zinc-400 font-mono text-[10px] p-2 focus:outline-none focus:border-zinc-600"
+                    >
+                      <option value="all">All Industries</option>
+                      {["Fashion", "Tech", "Automotive", "Food", "Travel", "Entertainment", "Finance", "Health", "Beauty"].map(i => (
+                        <option key={i} value={i}>{i}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
@@ -3835,56 +4850,142 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   <RefreshCcw size={32} className="text-zinc-800 animate-spin" />
                   <p className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Retrieving Archive...</p>
                 </div>
-              ) : pastTrends.length === 0 ? (
-                <div className="text-center py-20 border border-dashed border-zinc-800">
-                  <Search size={48} className="text-zinc-800 mx-auto mb-4" />
-                  <p className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">No past trends found in the archive.</p>
-                </div>
               ) : (
                 <div className="space-y-16">
-                  {pastTrends.map((session) => (
-                    <div key={session.id} className="space-y-6">
-                      <div className="flex items-center gap-4 border-b border-zinc-900 pb-4">
-                        <Clock size={14} className="text-zinc-700" />
-                        <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">
-                          Scanned on: {session.createdAt instanceof Timestamp ? session.createdAt.toDate().toLocaleString() : 'Recently'}
-                        </span>
+                  {pastTrends
+                    .filter(session => {
+                      if (!session.createdAt || !(session.createdAt instanceof Timestamp)) return true;
+                      const date = session.createdAt.toDate();
+                      const monthMatch = trendFilterMonth === "all" || date.getMonth().toString() === trendFilterMonth;
+                      const yearMatch = trendFilterYear === "all" || date.getFullYear().toString() === trendFilterYear;
+                      const industryMatch = trendFilterIndustry === "all" || session.trends.some(t => t.industry === trendFilterIndustry);
+                      return monthMatch && yearMatch && industryMatch;
+                    })
+                    .length === 0 ? (
+                      <div className="text-center py-20 border border-dashed border-zinc-800">
+                        <Search size={48} className="text-zinc-800 mx-auto mb-4" />
+                        <p className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">No trends found for the selected period.</p>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {session.trends.map((trend, idx) => (
-                          <motion.div 
-                            key={idx}
-                            className="bg-zinc-900/30 border border-zinc-800 p-8 hover:border-zinc-600 transition-all flex flex-col justify-between group"
-                          >
-                            <div className="space-y-6">
-                              <h3 className="font-display text-3xl text-white group-hover:text-zinc-200 transition-colors leading-tight italic">{trend.name}</h3>
-                              <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest leading-relaxed">{trend.why_it_matters}</p>
-                              <div className="pt-4 border-t border-zinc-800/50">
-                                <p className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest mb-2">Emotional Undercurrent</p>
-                                <p className="text-xs text-zinc-400 italic">{trend.emotional_undercurrent}</p>
-                              </div>
+                    ) : (
+                      pastTrends
+                        .filter(session => {
+                          if (!session.createdAt || !(session.createdAt instanceof Timestamp)) return true;
+                          const date = session.createdAt.toDate();
+                          const monthMatch = trendFilterMonth === "all" || date.getMonth().toString() === trendFilterMonth;
+                          const yearMatch = trendFilterYear === "all" || date.getFullYear().toString() === trendFilterYear;
+                          const industryMatch = trendFilterIndustry === "all" || session.trends.some(t => t.industry === trendFilterIndustry);
+                          return monthMatch && yearMatch && industryMatch;
+                        })
+                        .map((session) => (
+                          <div key={session.id} className="space-y-6">
+                            <div className="flex items-center gap-4 border-b border-zinc-900 pb-4">
+                              <Clock size={14} className="text-zinc-700" />
+                              <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">
+                                Scanned on: {session.createdAt instanceof Timestamp ? session.createdAt.toDate().toLocaleString() : 'Recently'}
+                              </span>
                             </div>
-                            <div className="mt-8 pt-6 border-t border-zinc-800 flex flex-col gap-3">
-                              <button 
-                                onClick={() => {
-                                  setBriefInput(trend.brief_starter);
-                                  setView("input");
-                                }}
-                                className="w-full py-3 bg-white text-black font-mono text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
-                              >
-                                <Zap size={12} />
-                                Use as Brief
-                              </button>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                              {session.trends
+                                .filter(t => trendFilterIndustry === "all" || t.industry === trendFilterIndustry)
+                                .map((trend, idx) => (
+                                <motion.div 
+                                  key={idx}
+                                  className="bg-zinc-900/30 border border-zinc-800 p-8 hover:border-zinc-600 transition-all flex flex-col justify-between group"
+                                >
+                                  <div className="space-y-6">
+                                    <div className="flex justify-between items-start">
+                                      <h3 className="font-display text-3xl text-white group-hover:text-zinc-200 transition-colors leading-tight italic">{trend.name}</h3>
+                                      {trend.industry && (
+                                        <span className="px-2 py-1 bg-zinc-800 text-zinc-400 font-mono text-[8px] uppercase tracking-widest border border-zinc-700">
+                                          {trend.industry}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest leading-relaxed">{trend.why_it_matters}</p>
+                                    <div className="pt-4 border-t border-zinc-800/50">
+                                      <p className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest mb-2">Emotional Undercurrent</p>
+                                      <p className="text-xs text-zinc-400 italic">{trend.emotional_undercurrent}</p>
+                                    </div>
+                                  </div>
+                                  <div className="mt-8 pt-6 border-t border-zinc-800 flex flex-col gap-3">
+                                    <button 
+                                      onClick={() => {
+                                        setBriefInput(trend.brief_starter);
+                                        setView("input");
+                                      }}
+                                      className="w-full py-3 bg-white text-black font-mono text-[10px] uppercase tracking-widest hover:bg-zinc-200 transition-all flex items-center justify-center gap-2"
+                                    >
+                                      <Zap size={12} />
+                                      Use as Brief
+                                    </button>
+                                  </div>
+                                </motion.div>
+                              ))}
                             </div>
-                          </motion.div>
-                        ))}
-                      </div>
+                          </div>
+                        ))
+                      )}
                     </div>
-                  ))}
-                </div>
+                  )}
+                </motion.div>
               )}
-            </motion.div>
-          )}
+
+          {/* Welcome Modal */}
+          {/* Welcome Modal */}
+          <AnimatePresence>
+            {showWelcomeModal && (
+              <motion.div 
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-6"
+              >
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  className="bg-[#0a1628] border border-zinc-800 p-10 max-w-2xl w-full space-y-8 relative"
+                >
+                  <button 
+                    onClick={() => setShowWelcomeModal(false)}
+                    className="absolute top-6 right-6 text-zinc-500 hover:text-white transition-all"
+                  >
+                    <X size={20} />
+                  </button>
+                  
+                  <div className="space-y-4">
+                    <h2 className="font-display text-5xl text-white italic leading-tight">Welcome to PromptCraft</h2>
+                    <p className="font-mono text-xs text-[#c87941] uppercase tracking-widest">Professional AI Prompt Engineering Workstation</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 py-4">
+                    <div className="space-y-2">
+                      <h4 className="font-mono text-[10px] text-white uppercase tracking-widest">Structured Editor</h4>
+                      <p className="text-xs text-zinc-500 leading-relaxed">Break down complex cinematic prompts into 6 core pillars: Subject, Composition, Lighting, Camera, Style, and Motion.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="font-mono text-[10px] text-white uppercase tracking-widest">AI Intelligence</h4>
+                      <p className="text-xs text-zinc-500 leading-relaxed">Use Beautify to organize raw ideas, Smart Edit for natural language tweaks, and Expand for rich cinematic detail.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="font-mono text-[10px] text-white uppercase tracking-widest">Character Studio</h4>
+                      <p className="text-xs text-zinc-500 leading-relaxed">Build a library of persistent character profiles to maintain consistency across multiple shots and prompts.</p>
+                    </div>
+                    <div className="space-y-2">
+                      <h4 className="font-mono text-[10px] text-white uppercase tracking-widest">Storyboard Mode</h4>
+                      <p className="text-xs text-zinc-500 leading-relaxed">Switch to multi-shot view to build full visual narratives. Reorder shots and export your vision as a storyboard.</p>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => setShowWelcomeModal(false)}
+                    className="w-full py-4 bg-[#c87941] text-white font-mono text-xs uppercase tracking-widest hover:bg-[#b06a38] transition-all shadow-xl shadow-[#c87941]/20"
+                  >
+                    Enter Workstation
+                  </button>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <AnimatePresence>
             {view === "compare" && results && (
