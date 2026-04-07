@@ -60,10 +60,12 @@ import {
   Sun,
   Eye,
   Star,
-  Upload
+  Upload,
+  Palette
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import * as pdfjsLib from 'pdfjs-dist';
+// @ts-ignore
 import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
@@ -576,7 +578,7 @@ export default function App() {
   const [briefInput, setBriefInput] = useState("");
   const [scriptInput, setScriptInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
-  const [inspiration, setInspiration] = useState<"original" | "movie" | "ad" | "viral" | "found_footage">("original");
+  const [inspiration, setInspiration] = useState<"original" | "movie" | "ad" | "viral" | "found_footage" | "festival" | "arthouse" | "feature">("original");
   const [decade, setDecade] = useState<string>("Modern");
   const [selectedConcepts, setSelectedConcepts] = useState<number[]>([]);
   const [selectedTrends, setSelectedTrends] = useState<number[]>([]);
@@ -649,13 +651,14 @@ export default function App() {
   const [favoritePresets, setFavoritePresets] = useState<string[]>([]);
   const [galleryGridCols, setGalleryGridCols] = useState<1 | 2 | 4>(2);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
-  const [higgsfieldModel, setHiggsfieldModel] = useState<string>("Cinema Studio");
+  const [higgsfieldModel, setHiggsfieldModel] = useState<string>("None Selected");
   const [clickToAdFields, setClickToAdFields] = useState({
     productUrl: "",
     brandIntent: "",
     visualAnchors: "",
     targetPlatform: "IG Reels"
   });
+  const [isCameraPhysicsEnabled, setIsCameraPhysicsEnabled] = useState(false);
   const [cameraPhysics, setCameraPhysics] = useState({
     body: "ARRI Alexa LF",
     lens: "Prime",
@@ -1217,6 +1220,7 @@ export default function App() {
   }, [view]);
 
   const generateConcepts = async () => {
+    console.log("Firing Creative Engine... Preparing for actual generation logic.");
     if (!briefInput.trim() && !scriptInput.trim()) return;
     setError(null);
     setIsGeneratingConcepts(true);
@@ -1246,11 +1250,11 @@ MODE: ${mode === "surreal" ? "SURREAL AI (Impossible Scenarios)" : "STANDARD STR
 HIGGSFIELD USER SELECTIONS:
 - Selected Model: ${higgsfieldModel}
 - Multi-Shot Sequence: ${isMultiShot || scriptInput ? "YES" : "NO"}
-- Camera Physics: 
+${isCameraPhysicsEnabled ? `- Camera Physics: 
   - Body: ${cameraPhysics.body}
   - Lens: ${cameraPhysics.lens}
   - Focal Length: ${cameraPhysics.focalLength}
-  - Movements: ${cameraPhysics.movements.join(", ") || "None"}
+  - Movements: ${cameraPhysics.movements.join(", ") || "None"}` : "- Camera Physics: None (Let AI decide)"}
 ${higgsfieldModel === "Click-to-Ad" ? `
 CLICK-TO-AD FIELDS:
 - Product URL: ${clickToAdFields.productUrl}
@@ -2805,6 +2809,9 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       { id: "ad", label: "Ad Remix", icon: <RefreshCcw size={12} /> },
                       { id: "viral", label: "Viral", icon: <Sparkles size={12} /> },
                       { id: "found_footage", label: "Found Footage", icon: <Video size={12} /> },
+                      { id: "festival", label: "Festival Film", icon: <Film size={12} /> },
+                      { id: "arthouse", label: "Art House", icon: <Palette size={12} /> },
+                      { id: "feature", label: "Feature", icon: <Video size={12} /> },
                     ].map((i) => (
                       <button
                         key={i.id}
@@ -2830,7 +2837,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     Target Video Length
                   </label>
                   <div className="grid grid-cols-3 gap-2">
-                    {[":15s", ":30s", ":60s", "Long Form", "Teaser", "Pilot"].map((l) => (
+                    {[":15s", ":30s", ":60s", "3 mins", "10 mins", "30 mins", "90 mins", "Feature"].map((l) => (
                       <button
                         key={l}
                         onClick={() => setVideoLength(l)}
@@ -2971,7 +2978,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     Higgsfield Model
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {["Cinema Studio", "Click-to-Ad", "Bullet Time", "Giant Product", "Packshot", "Macro Scene", "Commercial Faces", "ASMR Promo", "Sketch-to-Real", "Soul Cast"].map((m) => (
+                    {["None Selected", "Cinema Studio", "Click-to-Ad", "Bullet Time", "Giant Product", "Packshot", "Macro Scene", "Commercial Faces", "ASMR Promo", "Sketch-to-Real", "Soul Cast"].map((m) => (
                       <button
                         key={m}
                         onClick={() => setHiggsfieldModel(m)}
@@ -3016,80 +3023,97 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     </div>
                   </button>
                 </div>
-              </div>
-
-              {/* Camera Physics Section */}
+               {/* Camera Physics Section */}
               <div className="p-8 bg-zinc-900/30 border border-zinc-800 space-y-8">
-                <div className="flex items-center gap-2">
-                  <Camera size={14} className="text-zinc-500" />
-                  <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Camera Physics Layer</span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Camera size={14} className="text-zinc-500" />
+                    <span className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Camera Physics Layer (Optional)</span>
+                  </div>
+                  <button
+                    onClick={() => setIsCameraPhysicsEnabled(!isCameraPhysicsEnabled)}
+                    className={cn(
+                      "w-10 h-5 rounded-full transition-colors relative",
+                      isCameraPhysicsEnabled ? "bg-white" : "bg-zinc-800"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-3 h-3 rounded-full bg-black absolute top-1 transition-all",
+                      isCameraPhysicsEnabled ? "left-6" : "left-1 bg-zinc-500"
+                    )} />
+                  </button>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                  <div className="space-y-3">
-                    <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Body</label>
-                    <select 
-                      value={cameraPhysics.body}
-                      onChange={(e) => setCameraPhysics({...cameraPhysics, body: e.target.value})}
-                      className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-zinc-400 outline-none focus:border-zinc-600"
-                    >
-                      {["ARRI Alexa LF", "RED V-Raptor", "Sony Venice 2", "Panavision Millennium DXL2"].map(b => (
-                        <option key={b} value={b}>{b}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-3">
-                    <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Lens Type</label>
-                    <select 
-                      value={cameraPhysics.lens}
-                      onChange={(e) => setCameraPhysics({...cameraPhysics, lens: e.target.value})}
-                      className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-zinc-400 outline-none focus:border-zinc-600"
-                    >
-                      {["Prime", "Anamorphic", "Zoom", "Macro", "Fish-eye"].map(l => (
-                        <option key={l} value={l}>{l}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-3">
-                    <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Focal Length</label>
-                    <select 
-                      value={cameraPhysics.focalLength}
-                      onChange={(e) => setCameraPhysics({...cameraPhysics, focalLength: e.target.value})}
-                      className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-zinc-400 outline-none focus:border-zinc-600"
-                    >
-                      {["14mm", "24mm", "35mm", "50mm", "85mm", "135mm"].map(f => (
-                        <option key={f} value={f}>{f}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                {isCameraPhysicsEnabled && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                      <div className="space-y-3">
+                        <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Body</label>
+                        <select 
+                          value={cameraPhysics.body}
+                          onChange={(e) => setCameraPhysics({...cameraPhysics, body: e.target.value})}
+                          className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-zinc-400 outline-none focus:border-zinc-600"
+                        >
+                          {["ARRI Alexa LF", "RED V-Raptor", "Sony Venice 2", "Panavision Millennium DXL2"].map(b => (
+                            <option key={b} value={b}>{b}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-3">
+                        <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Lens Type</label>
+                        <select 
+                          value={cameraPhysics.lens}
+                          onChange={(e) => setCameraPhysics({...cameraPhysics, lens: e.target.value})}
+                          className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-zinc-400 outline-none focus:border-zinc-600"
+                        >
+                          {["Prime", "Anamorphic", "Zoom", "Macro", "Fish-eye"].map(l => (
+                            <option key={l} value={l}>{l}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="space-y-3">
+                        <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Focal Length</label>
+                        <select 
+                          value={cameraPhysics.focalLength}
+                          onChange={(e) => setCameraPhysics({...cameraPhysics, focalLength: e.target.value})}
+                          className="w-full bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-zinc-400 outline-none focus:border-zinc-600"
+                        >
+                          {["14mm", "24mm", "35mm", "50mm", "85mm", "135mm"].map(f => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
 
-                <div className="space-y-4">
-                  <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Simultaneous Movements (Max 3)</label>
-                  <div className="flex flex-wrap gap-2">
-                    {["Dolly Push", "Dolly Pull", "Pan Left", "Pan Right", "Tilt Up", "Tilt Down", "Crane Up", "Crane Down", "FPV Fly-through", "Handheld Shake"].map(m => (
-                      <button
-                        key={m}
-                        onClick={() => {
-                          const current = cameraPhysics.movements;
-                          if (current.includes(m)) {
-                            setCameraPhysics({...cameraPhysics, movements: current.filter(x => x !== m)});
-                          } else if (current.length < 3) {
-                            setCameraPhysics({...cameraPhysics, movements: [...current, m]});
-                          }
-                        }}
-                        className={cn(
-                          "px-3 py-1.5 font-mono text-[9px] uppercase tracking-widest border transition-all",
-                          cameraPhysics.movements.includes(m)
-                            ? "bg-white text-black border-white"
-                            : "bg-zinc-950 text-zinc-600 border-zinc-800 hover:border-zinc-700"
-                        )}
-                      >
-                        {m}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                    <div className="space-y-4">
+                      <label className="font-mono text-[9px] text-zinc-700 uppercase tracking-widest">Simultaneous Movements (Max 3)</label>
+                      <div className="flex flex-wrap gap-2">
+                        {["Dolly Push", "Dolly Pull", "Pan Left", "Pan Right", "Tilt Up", "Tilt Down", "Crane Up", "Crane Down", "FPV Fly-through", "Handheld Shake"].map(m => (
+                          <button
+                            key={m}
+                            onClick={() => {
+                              const current = cameraPhysics.movements;
+                              if (current.includes(m)) {
+                                setCameraPhysics({...cameraPhysics, movements: current.filter(x => x !== m)});
+                              } else if (current.length < 3) {
+                                setCameraPhysics({...cameraPhysics, movements: [...current, m]});
+                              }
+                            }}
+                            className={cn(
+                              "px-3 py-1.5 font-mono text-[9px] uppercase tracking-widest border transition-all",
+                              cameraPhysics.movements.includes(m)
+                                ? "bg-white text-black border-white"
+                                : "bg-zinc-950 text-zinc-500 border-zinc-800 hover:border-zinc-700"
+                            )}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
               </div>
 
               {/* Click-to-Ad Section (Conditional) */}
