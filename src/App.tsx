@@ -59,9 +59,14 @@ import {
   Moon,
   Sun,
   Eye,
-  Star
+  Star,
+  Upload
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
+import * as pdfjsLib from 'pdfjs-dist';
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 // --- Prompts ---
 
@@ -189,6 +194,7 @@ INSPIRATION MODES:
 - CINEMATIC / MOVIE STYLE: Draw inspiration from iconic film genres, directors (e.g., Wes Anderson, Nolan, Kubrick), or specific cinematic tropes. The concept should feel like a "pitch pilot" or a teaser for a larger narrative.
 - AD REMIX: Take inspiration from classic, award-winning ad campaigns (e.g., "Think Different", "Just Do It", "The Man Your Man Could Smell Like") and remix their core mechanics for the current brand and cultural context.
 - VIRAL / FAR-FETCHED: Cook up ideas that are intentionally provocative, surreal, or "too far" to be ignored. Focus on "viral-worthy" mechanics that demand attention through sheer audacity or experimental AI execution.
+- FOUND FOOTAGE: Draw inspiration from VHS tapes, camcorders, CCTV, bodycams, or amateur recordings. The concept should feel raw, unpolished, and authentic to the specified decade.
 
 RULES:
 - Never generate safe, obvious, or expected ideas
@@ -566,9 +572,12 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 export default function App() {
   const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
+  const [anomaLabTheme, setAnomaLabTheme] = useState<"dark" | "light" | "high-contrast">("dark");
   const [briefInput, setBriefInput] = useState("");
+  const [scriptInput, setScriptInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
-  const [inspiration, setInspiration] = useState<"original" | "movie" | "ad" | "viral">("original");
+  const [inspiration, setInspiration] = useState<"original" | "movie" | "ad" | "viral" | "found_footage">("original");
+  const [decade, setDecade] = useState<string>("Modern");
   const [selectedConcepts, setSelectedConcepts] = useState<number[]>([]);
   const [selectedTrends, setSelectedTrends] = useState<number[]>([]);
   const [quickFireResults, setQuickFireResults] = useState<string[]>([]);
@@ -610,7 +619,7 @@ export default function App() {
   const [attachedExtractorFrames, setAttachedExtractorFrames] = useState<ExtractorFrame[]>([]);
   const [isMultiShot, setIsMultiShot] = useState(false);
   
-  // Brief Machine State
+  // Anoma Lab State
   const [briefMachineShot, setBriefMachineShot] = useState<BriefMachineShot>({
     id: Date.now().toString(),
     subject: "",
@@ -637,7 +646,6 @@ export default function App() {
   const [expandedPresetCategories, setExpandedPresetCategories] = useState<string[]>([]);
   const [hoveredStoryboardFrame, setHoveredStoryboardFrame] = useState<number | null>(null);
   const [anomaLabGallery, setAnomaLabGallery] = useState<string[]>([]);
-  const [anomaLabTheme, setAnomaLabTheme] = useState<"dark" | "light" | "high-contrast">("dark");
   const [favoritePresets, setFavoritePresets] = useState<string[]>([]);
   const [galleryGridCols, setGalleryGridCols] = useState<1 | 2 | 4>(2);
   const [showWelcomeModal, setShowWelcomeModal] = useState(false);
@@ -1209,7 +1217,7 @@ export default function App() {
   }, [view]);
 
   const generateConcepts = async () => {
-    if (!briefInput.trim()) return;
+    if (!briefInput.trim() && !scriptInput.trim()) return;
     setError(null);
     setIsGeneratingConcepts(true);
     setLoading(true);
@@ -1229,19 +1237,21 @@ export default function App() {
       const response = await geminiService.generateContent({
         model: "gemini-3.1-pro-preview",
         contents: `USER BRIEF / INPUT: ${briefInput}${visualContext}
+${scriptInput ? `\nPROVIDED SCRIPT / STORY:\n${scriptInput}\n\n(If a script/story is provided, focus on adapting it into a storyboard/shot list for the concepts.)` : ""}
 TARGET VIDEO LENGTH: ${videoLength}
 INSPIRATION MODE: ${inspiration.toUpperCase()}
+DECADE TO DEPICT: ${decade}
 MODE: ${mode === "surreal" ? "SURREAL AI (Impossible Scenarios)" : "STANDARD STRATEGY"}
 
 HIGGSFIELD USER SELECTIONS:
 - Selected Model: ${higgsfieldModel}
-- Multi-Shot Sequence: ${isMultiShot ? "YES" : "NO"}
+- Multi-Shot Sequence: ${isMultiShot || scriptInput ? "YES" : "NO"}
 - Camera Physics: 
   - Body: ${cameraPhysics.body}
   - Lens: ${cameraPhysics.lens}
   - Focal Length: ${cameraPhysics.focalLength}
   - Movements: ${cameraPhysics.movements.join(", ") || "None"}
-${inspiration === "ad" ? `
+${higgsfieldModel === "Click-to-Ad" ? `
 CLICK-TO-AD FIELDS:
 - Product URL: ${clickToAdFields.productUrl}
 - Brand Intent: ${clickToAdFields.brandIntent}
@@ -1254,7 +1264,7 @@ TASK:
 1. Parse the USER BRIEF to identify the BRAND, CATEGORY, and the core TENSION/INSIGHT.
 2. Generate 3 award-caliber ad concepts (Deep Concepts).
 3. Generate 5 high-impact, one-line "Quick Fire" provocations specifically tailored to the TARGET VIDEO LENGTH.
-4. For each concept, ensure the 'higgsfield_config' reflects the user's selected model and camera physics, and if Multi-Shot is 'YES', provide a detailed shot breakdown.
+4. For each concept, ensure the 'higgsfield_config' reflects the user's selected model and camera physics. If Multi-Shot is 'YES' OR a script/story is provided, provide a detailed shot breakdown (storyboard).
 
 Think D&AD. Think Cannes.`,
         config: {
@@ -2576,7 +2586,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               className="flex flex-col md:flex-row md:items-baseline gap-4"
             >
               <h1 className="font-display text-5xl md:text-7xl text-white tracking-tight leading-none">
-                Brief Machine
+                Anoma Lab
               </h1>
               <span className="font-mono text-[10px] text-zinc-500 uppercase tracking-[0.2em]">
                 Concept Engine v2.6
@@ -2734,6 +2744,55 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 />
               </div>
 
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
+                    Script / Story (Optional)
+                  </label>
+                  <label className="cursor-pointer font-mono text-[9px] text-zinc-500 hover:text-zinc-300 uppercase tracking-widest flex items-center gap-2 transition-colors">
+                    <Upload size={12} />
+                    Upload File
+                    <input 
+                      type="file" 
+                      accept=".txt,.md,.rtf,.pdf" 
+                      className="hidden" 
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        
+                        if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+                          try {
+                            const arrayBuffer = await file.arrayBuffer();
+                            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                            let fullText = "";
+                            for (let i = 1; i <= pdf.numPages; i++) {
+                              const page = await pdf.getPage(i);
+                              const textContent = await page.getTextContent();
+                              const pageText = textContent.items.map((item: any) => item.str).join(" ");
+                              fullText += pageText + "\n\n";
+                            }
+                            setScriptInput(fullText);
+                          } catch (err) {
+                            console.error("Error reading PDF:", err);
+                            alert("Failed to read PDF file.");
+                          }
+                        } else {
+                          const reader = new FileReader();
+                          reader.onload = (e) => setScriptInput(e.target?.result as string);
+                          reader.readAsText(file);
+                        }
+                      }} 
+                    />
+                  </label>
+                </div>
+                <textarea 
+                  value={scriptInput}
+                  onChange={(e) => setScriptInput(e.target.value)}
+                  placeholder="Paste your script or story here, or upload a text or PDF file. We'll adapt it into a storyboard/shot list..."
+                  className="w-full bg-zinc-900/50 border border-zinc-800 px-6 py-6 text-sm font-mono text-zinc-300 outline-none focus:border-zinc-600 transition-colors placeholder:text-zinc-800 min-h-[120px] resize-y"
+                />
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-4">
                   <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block">
@@ -2744,7 +2803,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       { id: "original", label: "Original", icon: <Zap size={12} /> },
                       { id: "movie", label: "Cinematic", icon: <Search size={12} /> },
                       { id: "ad", label: "Ad Remix", icon: <RefreshCcw size={12} /> },
-                      { id: "viral", label: "Viral/Far-fetched", icon: <Sparkles size={12} /> },
+                      { id: "viral", label: "Viral", icon: <Sparkles size={12} /> },
+                      { id: "found_footage", label: "Found Footage", icon: <Video size={12} /> },
                     ].map((i) => (
                       <button
                         key={i.id}
@@ -2782,6 +2842,26 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         )}
                       >
                         {l}
+                      </button>
+                    ))}
+                  </div>
+
+                  <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest block mt-6">
+                    Decade to Depict
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {["Modern", "2000s", "1990s", "1980s", "1970s", "Retro-Futurism"].map((d) => (
+                      <button
+                        key={d}
+                        onClick={() => setDecade(d)}
+                        className={cn(
+                          "px-3 py-3 font-mono text-[9px] uppercase tracking-widest border transition-all",
+                          decade === d
+                            ? "bg-white text-black border-white"
+                            : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:border-zinc-700"
+                        )}
+                      >
+                        {d}
                       </button>
                     ))}
                   </div>
@@ -2891,14 +2971,14 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     Higgsfield Model
                   </label>
                   <div className="grid grid-cols-2 gap-2">
-                    {["Kling 3.0", "Veo 3.1", "Cinema Studio", "Click-to-Ad"].map((m) => (
+                    {["Cinema Studio", "Click-to-Ad", "Bullet Time", "Giant Product", "Packshot", "Macro Scene", "Commercial Faces", "ASMR Promo", "Sketch-to-Real", "Soul Cast"].map((m) => (
                       <button
                         key={m}
                         onClick={() => setHiggsfieldModel(m)}
                         className={cn(
                           "px-3 py-3 font-mono text-[9px] uppercase tracking-widest border transition-all",
                           higgsfieldModel === m
-                            ? "bg-white text-black border-white"
+                            ? "bg-[#FF3366]/10 text-[#FF3366] border-[#FF3366]/50"
                             : "bg-zinc-900/50 text-zinc-500 border-zinc-800 hover:border-zinc-700"
                         )}
                       >
@@ -3014,32 +3094,32 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
 
               {/* Click-to-Ad Section (Conditional) */}
               <AnimatePresence>
-                {inspiration === "ad" && (
+                {higgsfieldModel === "Click-to-Ad" && (
                   <motion.div 
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: "auto" }}
                     exit={{ opacity: 0, height: 0 }}
                     className="overflow-hidden"
                   >
-                    <div className="p-8 bg-cyan-950/10 border border-cyan-900/30 space-y-8">
+                    <div className="p-8 bg-zinc-900/30 border border-zinc-800 space-y-8">
                       <div className="flex items-center gap-2">
-                        <Zap size={14} className="text-cyan-400" />
-                        <span className="font-mono text-[10px] text-cyan-400 uppercase tracking-widest">Click-to-Ad Configuration</span>
+                        <Zap size={14} className="text-[#FF3366]" />
+                        <span className="font-mono text-[10px] text-[#FF3366] uppercase tracking-widest">Click-to-Ad Configuration</span>
                       </div>
                       
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                         <div className="space-y-3">
-                          <label className="font-mono text-[9px] text-cyan-800 uppercase tracking-widest">Product URL</label>
+                          <label className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest">Product URL</label>
                           <input 
                             type="text"
                             value={clickToAdFields.productUrl}
                             onChange={(e) => setClickToAdFields({...clickToAdFields, productUrl: e.target.value})}
                             placeholder="https://brand.com/product"
-                            className="w-full bg-zinc-950 border border-cyan-900/30 px-4 py-3 text-sm text-cyan-400 outline-none focus:border-cyan-500 transition-colors placeholder:text-cyan-900"
+                            className="w-full bg-zinc-950 border border-zinc-800 px-4 py-3 text-sm text-zinc-400 outline-none focus:border-zinc-600 transition-colors placeholder:text-zinc-700"
                           />
                         </div>
                         <div className="space-y-3">
-                          <label className="font-mono text-[9px] text-cyan-800 uppercase tracking-widest">Target Platform</label>
+                          <label className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest">Target Platform</label>
                           <div className="grid grid-cols-2 gap-2">
                             {["IG Reels", "TikTok", "YouTube Shorts", "Meta Feed"].map(p => (
                               <button
@@ -3048,8 +3128,8 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                 className={cn(
                                   "px-3 py-2 font-mono text-[9px] uppercase tracking-widest border transition-all",
                                   clickToAdFields.targetPlatform === p
-                                    ? "bg-cyan-400 text-black border-cyan-400"
-                                    : "bg-zinc-950 text-cyan-900 border-cyan-900/30 hover:border-cyan-700"
+                                    ? "bg-[#FF3366]/10 text-[#FF3366] border-[#FF3366]/50"
+                                    : "bg-zinc-950 text-zinc-600 border-zinc-800 hover:border-zinc-700"
                                 )}
                               >
                                 {p}
@@ -3060,22 +3140,22 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       </div>
 
                       <div className="space-y-3">
-                        <label className="font-mono text-[9px] text-cyan-800 uppercase tracking-widest">Brand Intent Summary</label>
+                        <label className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest">Brand Intent Summary</label>
                         <textarea 
                           value={clickToAdFields.brandIntent}
                           onChange={(e) => setClickToAdFields({...clickToAdFields, brandIntent: e.target.value})}
                           placeholder="What is the primary goal of this ad? (e.g. Drive sales for new winter collection)"
-                          className="w-full bg-zinc-950 border border-cyan-900/30 px-4 py-3 text-sm text-cyan-400 outline-none focus:border-cyan-500 transition-colors placeholder:text-cyan-900 min-h-[80px] resize-none"
+                          className="w-full bg-zinc-950 border border-zinc-800 px-4 py-3 text-sm text-zinc-400 outline-none focus:border-zinc-600 transition-colors placeholder:text-zinc-700 min-h-[80px] resize-none"
                         />
                       </div>
 
                       <div className="space-y-3">
-                        <label className="font-mono text-[9px] text-cyan-800 uppercase tracking-widest">Visual Anchors</label>
+                        <label className="font-mono text-[9px] text-zinc-600 uppercase tracking-widest">Visual Anchors</label>
                         <textarea 
                           value={clickToAdFields.visualAnchors}
                           onChange={(e) => setClickToAdFields({...clickToAdFields, visualAnchors: e.target.value})}
                           placeholder="Key visual elements to maintain (e.g. Logo placement, specific product color)"
-                          className="w-full bg-zinc-950 border border-cyan-900/30 px-4 py-3 text-sm text-cyan-400 outline-none focus:border-cyan-500 transition-colors placeholder:text-cyan-900 min-h-[80px] resize-none"
+                          className="w-full bg-zinc-950 border border-zinc-800 px-4 py-3 text-sm text-zinc-400 outline-none focus:border-zinc-600 transition-colors placeholder:text-zinc-700 min-h-[80px] resize-none"
                         />
                       </div>
                     </div>
@@ -3085,10 +3165,10 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
 
               <button
                 onClick={generateConcepts}
-                disabled={!briefInput.trim()}
+                disabled={!briefInput.trim() && !scriptInput.trim()}
                 className={cn(
                   "w-full py-8 font-display italic text-3xl transition-all duration-500 flex items-center justify-center gap-4 group shadow-2xl",
-                  briefInput.trim() 
+                  (briefInput.trim() || scriptInput.trim())
                     ? "bg-white text-black hover:bg-zinc-200" 
                     : "bg-zinc-900 text-zinc-700 cursor-not-allowed"
                 )}
@@ -4534,7 +4614,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         </p>
                         <div className="text-right">
                           <p className="font-mono text-[10px] text-[#52525b] uppercase tracking-widest">Generated By</p>
-                          <p className="font-display text-lg text-[#ffffff] italic">Brief Machine AI</p>
+                          <p className="font-display text-lg text-[#ffffff] italic">Anoma Lab AI</p>
                         </div>
                       </div>
                     </div>
@@ -5536,7 +5616,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   </button>
                   
                   <div className="space-y-4">
-                    <h2 className="font-display text-5xl text-white italic leading-tight">Welcome to Brief Machine</h2>
+                    <h2 className="font-display text-5xl text-white italic leading-tight">Welcome to Anoma Lab</h2>
                     <p className="font-mono text-xs text-[#c87941] uppercase tracking-widest">Professional AI Prompt Engineering Workstation</p>
                   </div>
 
@@ -6568,19 +6648,19 @@ function ConceptCard({
 
                       {concept.click_to_ad_brief && (
                         <div className="space-y-4">
-                          <span className="font-mono text-[10px] text-cyan-400 uppercase tracking-widest">Click-to-Ad Brief</span>
-                          <div className="p-6 bg-cyan-950/10 border border-cyan-900/30 space-y-4">
+                          <span className="font-mono text-[10px] text-[#FF3366] uppercase tracking-widest">Click-to-Ad Brief</span>
+                          <div className="p-6 bg-zinc-900/30 border border-zinc-800 space-y-4">
                             <div className="space-y-1">
-                              <span className="font-mono text-[8px] text-cyan-800 uppercase tracking-widest">Brand Intent</span>
-                              <p className="text-[11px] text-cyan-400/80 leading-relaxed">{concept.click_to_ad_brief.brand_intent}</p>
+                              <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Brand Intent</span>
+                              <p className="text-[11px] text-zinc-400 leading-relaxed">{concept.click_to_ad_brief.brand_intent}</p>
                             </div>
                             <div className="space-y-1">
-                              <span className="font-mono text-[8px] text-cyan-800 uppercase tracking-widest">Visual Anchors</span>
-                              <p className="text-[11px] text-cyan-400/80 leading-relaxed">{concept.click_to_ad_brief.visual_anchors}</p>
+                              <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Visual Anchors</span>
+                              <p className="text-[11px] text-zinc-400 leading-relaxed">{concept.click_to_ad_brief.visual_anchors}</p>
                             </div>
                             <div className="flex justify-between items-center">
-                              <span className="font-mono text-[8px] text-cyan-800 uppercase tracking-widest">Target Platform</span>
-                              <span className="px-2 py-0.5 bg-cyan-950 border border-cyan-900 text-[9px] font-mono text-cyan-400 uppercase tracking-wider">{concept.click_to_ad_brief.target_platform}</span>
+                              <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Target Platform</span>
+                              <span className="px-2 py-0.5 bg-zinc-950 border border-zinc-800 text-[9px] font-mono text-zinc-400 uppercase tracking-wider">{concept.click_to_ad_brief.target_platform}</span>
                             </div>
                           </div>
                         </div>

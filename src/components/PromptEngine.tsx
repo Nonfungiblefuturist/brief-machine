@@ -78,7 +78,8 @@ export default function PromptEngine() {
       hookText,
       mood,
       cam: { body: camBody, lens: camLens, move: camMove, grade: camGrade, meta: camMeta },
-      extra
+      extra,
+      clickToAdFields
     });
     setOutput(result);
   };
@@ -187,6 +188,76 @@ export default function PromptEngine() {
                       </button>
                     ))}
                   </div>
+
+                  <AnimatePresence>
+                    {infra === "click_to_ad" && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden mt-4"
+                      >
+                        <div className="p-6 bg-zinc-900/30 border border-zinc-800 rounded-lg space-y-6">
+                          <div className="flex items-center gap-2">
+                            <Zap size={14} className="text-[#FF3366]" />
+                            <span className="font-mono text-[10px] text-[#FF3366] uppercase tracking-widest">Click-to-Ad Configuration</span>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-3">
+                              <label className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest">Product URL</label>
+                              <input 
+                                type="text"
+                                value={clickToAdFields.productUrl}
+                                onChange={(e) => setClickToAdFields({...clickToAdFields, productUrl: e.target.value})}
+                                placeholder="https://brand.com/product"
+                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-300 outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-600"
+                              />
+                            </div>
+                            <div className="space-y-3">
+                              <label className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest">Target Platform</label>
+                              <div className="grid grid-cols-2 gap-2">
+                                {["IG Reels", "TikTok", "YouTube Shorts", "Meta Feed"].map(p => (
+                                  <button
+                                    key={p}
+                                    onClick={() => setClickToAdFields({...clickToAdFields, targetPlatform: p})}
+                                    className={cn(
+                                      "px-3 py-2 rounded-lg font-mono text-[9px] uppercase tracking-widest border transition-all",
+                                      clickToAdFields.targetPlatform === p
+                                        ? "bg-[#FF3366]/10 text-[#FF3366] border-[#FF3366]/50"
+                                        : "bg-zinc-950 text-zinc-500 border-zinc-800 hover:border-zinc-700"
+                                    )}
+                                  >
+                                    {p}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <label className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest">Brand Intent Summary</label>
+                            <textarea 
+                              value={clickToAdFields.brandIntent}
+                              onChange={(e) => setClickToAdFields({...clickToAdFields, brandIntent: e.target.value})}
+                              placeholder="What is the primary goal of this ad? (e.g. Drive sales for new winter collection)"
+                              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-300 outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-600 min-h-[80px] resize-none"
+                            />
+                          </div>
+
+                          <div className="space-y-3">
+                            <label className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest">Visual Anchors</label>
+                            <textarea 
+                              value={clickToAdFields.visualAnchors}
+                              onChange={(e) => setClickToAdFields({...clickToAdFields, visualAnchors: e.target.value})}
+                              placeholder="Key visual elements to maintain (e.g. Logo placement, specific product color)"
+                              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-300 outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-600 min-h-[80px] resize-none"
+                            />
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </section>
 
                 {/* 2. Concept Framework */}
@@ -377,8 +448,8 @@ export default function PromptEngine() {
                       {output.prompt}
                     </div>
 
-                    <div className="p-4 rounded-lg bg-gradient-to-r from-cyan-500/10 to-purple-500/10 border border-cyan-500/20 text-xs text-cyan-100/80 leading-relaxed font-mono">
-                      <div className="text-[10px] text-cyan-400/50 mb-2 uppercase tracking-widest">Workflow Instructions</div>
+                    <div className="p-4 rounded-lg bg-gradient-to-r from-[#FF3366]/10 to-[#FF3366]/5 border border-[#FF3366]/20 text-xs text-zinc-300 leading-relaxed font-mono">
+                      <div className="text-[10px] text-[#FF3366]/50 mb-2 uppercase tracking-widest">Workflow Instructions</div>
                       {output.workflow}
                     </div>
 
@@ -500,7 +571,7 @@ export default function PromptEngine() {
                       <div className="text-sm text-zinc-300 leading-relaxed mb-3">
                         {p.prompt}
                       </div>
-                      <div className="text-[10px] text-cyan-400/60 font-mono leading-relaxed bg-cyan-500/5 p-2 rounded border border-cyan-500/10">
+                      <div className="text-[10px] text-[#FF3366]/60 font-mono leading-relaxed bg-[#FF3366]/5 p-2 rounded border border-[#FF3366]/10">
                         {p.workflow}
                       </div>
                     </div>

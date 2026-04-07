@@ -1,0 +1,11 @@
+import fs from 'fs';
+let content = fs.readFileSync('src/App.tsx', 'utf-8');
+content = content.replace(/BriefMachineCharacter/g, 'AnomaLabCharacter');
+content = content.replace(/BriefMachineHistoryComponent/g, 'AnomaLabHistoryComponent');
+content = content.replace(/setBriefMachineCharacters/g, 'setAnomaLabCharacters');
+content = content.replace(/setIsBriefMachineSidebarOpen/g, 'setIsAnomaLabSidebarOpen');
+content = content.replace(/isBriefMachineRightPanelOpen/g, 'isAnomaLabRightPanelOpen');
+content = content.replace(/setIsBriefMachineRightPanelOpen/g, 'setIsAnomaLabRightPanelOpen');
+content = content.replace(/exportBriefMachineJSON/g, 'exportAnomaLabJSON');
+content = content.replace(/BriefMachine_Export_/g, 'AnomaLab_Export_');
+fs.writeFileSync('src/App.tsx', content);

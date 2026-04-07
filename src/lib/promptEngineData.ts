@@ -188,11 +188,17 @@ export function assemblePrompt(config: {
     meta: string;
   };
   extra: string;
+  clickToAdFields?: {
+    productUrl: string;
+    brandIntent: string;
+    visualAnchors: string;
+    targetPlatform: string;
+  };
 }): { prompt: string; workflow: string; platform: string; label: string } {
   const target = INFRASTRUCTURE_TARGETS.find(t => t.id === config.infra);
   if (!target) return { prompt: "", workflow: "", platform: "", label: "" };
 
-  const { subject, hookText: hook, mood, cam, extra } = config;
+  const { subject, hookText: hook, mood, cam, extra, clickToAdFields } = config;
   const { body, lens, move, grade, meta } = cam;
 
   let prompt = "";
@@ -204,7 +210,7 @@ export function assemblePrompt(config: {
       workflow = `Cinema Studio 3.0 → Soul Cast: create/select character → Set location prompt → Camera body: ${body} → Lens: ${lens} → Genre: ${mood} → Generate Hero Frame batch → Select best as Anchor → Animate with motion prompt. Cinematic reasoning engine interprets narrative intent. Audio generates natively. Up to 9 reference images.`;
       break;
     case "click_to_ad":
-      prompt = `Product URL input. Override: ${hook}. ${subject}. ${mood} tone. ${grade} look. ${extra}`.trim();
+      prompt = `Product URL: ${clickToAdFields?.productUrl || 'N/A'}. Target Platform: ${clickToAdFields?.targetPlatform || 'IG Reels'}. Brand Intent: ${clickToAdFields?.brandIntent || 'N/A'}. Visual Anchors: ${clickToAdFields?.visualAnchors || 'N/A'}. Override: ${hook}. ${subject}. ${mood} tone. ${grade} look. ${extra}`.trim();
       workflow = `Higgsfield → Click-to-Ad → Paste product page URL → AI extracts brand intent + visual anchors → Override with prompt for creative direction → 2-5 min generation. Uses GPT-4.1 for deterministic structure.`;
       break;
     case "soul_cast":
