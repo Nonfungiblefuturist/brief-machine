@@ -1927,6 +1927,17 @@ Think D&AD. Think Cannes.`,
     });
   };
 
+  const handleFrameImageUpload = (index: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      updateStoryboardFrame(index, { visual_url: reader.result as string });
+    };
+    reader.readAsDataURL(file);
+  };
+
   const fetchTrends = async (loadMore = false) => {
     if (loadMore) setIsFetchingMoreTrends(true);
     else setView("loading");
@@ -4474,7 +4485,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                       value={storyboarderInput}
                       onChange={(e) => setStoryboarderInput(e.target.value)}
                       placeholder="Describe the scene, the action, or paste a script snippet..."
-                      className="w-full bg-black/50 border border-zinc-800 p-6 text-white font-display text-xl focus:border-white focus:outline-none transition-all min-h-[200px] resize-none"
+                      className="w-full bg-zinc-950 border border-zinc-800 p-6 text-zinc-200 font-mono text-sm leading-relaxed focus:border-zinc-500 focus:outline-none transition-all min-h-[200px] resize-none"
                     />
                   </div>
 
@@ -4675,6 +4686,10 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           <div className="absolute top-4 left-4 bg-[rgba(0,0,0,0.8)] px-3 py-1 font-mono text-xs text-[#ffffff] border border-[rgba(255,255,255,0.1)]">0{i+1}</div>
                           
                           <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity" data-html2canvas-ignore="true">
+                            <label className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ffffff] hover:text-[#000000] transition-all cursor-pointer" title="Upload Image">
+                              <Upload size={14} />
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameImageUpload(i, e)} />
+                            </label>
                             {frame.visual_url && (
                               <>
                                 <button 
@@ -4703,12 +4718,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                           </div>
                         </div>
                         
-                        <div className="space-y-4 p-6 bg-[rgba(24,24,27,0.3)] border border-[#27272a]">
+                        <div className="space-y-4 p-6 bg-zinc-900 border border-zinc-800">
                           {refiningFrameIndex === i && (
                             <motion.div 
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: "auto" }}
-                              className="pb-4 space-y-3 border-b border-[rgba(39,39,42,0.5)] mb-4"
+                              className="pb-4 space-y-3 border-b border-zinc-800 mb-4"
                             >
                               <label className="font-mono text-[9px] text-cyan-500 uppercase tracking-widest">Refinement Feedback</label>
                               <div className="flex gap-2">
@@ -4717,7 +4732,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                                   value={refinementFeedback}
                                   onChange={(e) => setRefinementFeedback(e.target.value)}
                                   placeholder="e.g., 'Make it more moody', 'Add a red car'..."
-                                  className="flex-1 bg-zinc-900 border border-zinc-800 px-3 py-2 text-xs text-white focus:ring-1 focus:ring-cyan-500 outline-none"
+                                  className="flex-1 bg-zinc-950 border border-zinc-800 px-3 py-2 text-xs text-white focus:ring-1 focus:ring-cyan-500 outline-none"
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter') generateIndividualFrame(i, refinementFeedback);
                                   }}
@@ -4733,55 +4748,55 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                             </motion.div>
                           )}
                           <div className="space-y-2">
-                            <label className="font-mono text-[9px] text-[#52525b] uppercase tracking-widest">Visual Description</label>
+                            <label className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest">Visual Description</label>
                             <textarea 
                               value={frame.frame_description}
                               onChange={(e) => updateStoryboardFrame(i, { frame_description: e.target.value })}
                               placeholder="Describe the shot..."
-                              className="w-full bg-transparent border-none p-0 text-sm text-[#e4e4e7] leading-relaxed font-medium focus:ring-0 resize-none h-20"
+                              className="w-full bg-zinc-950 border border-zinc-800 p-3 text-sm text-zinc-100 leading-relaxed font-medium focus:border-zinc-600 outline-none resize-none h-20"
                             />
                           </div>
 
-                          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-[rgba(39,39,42,0.5)]">
+                          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-zinc-800">
                             <div className="space-y-1">
-                              <label className="font-mono text-[8px] text-[#52525b] uppercase tracking-widest">Camera</label>
+                              <label className="font-mono text-[8px] text-zinc-500 uppercase tracking-widest">Camera</label>
                               <input 
                                 type="text"
                                 value={frame.camera_angle || ""}
                                 onChange={(e) => updateStoryboardFrame(i, { camera_angle: e.target.value })}
                                 placeholder="Dolly, Crane..."
-                                className="w-full bg-transparent border-none p-0 text-[10px] text-[#e4e4e7] focus:ring-0"
+                                className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-[10px] text-zinc-300 focus:border-zinc-600 outline-none"
                               />
                             </div>
                             <div className="space-y-1">
-                              <label className="font-mono text-[8px] text-[#52525b] uppercase tracking-widest">Lighting</label>
+                              <label className="font-mono text-[8px] text-zinc-500 uppercase tracking-widest">Lighting</label>
                               <input 
                                 type="text"
                                 value={frame.lighting || ""}
                                 onChange={(e) => updateStoryboardFrame(i, { lighting: e.target.value })}
                                 placeholder="Golden hour..."
-                                className="w-full bg-transparent border-none p-0 text-[10px] text-[#e4e4e7] focus:ring-0"
+                                className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-[10px] text-zinc-300 focus:border-zinc-600 outline-none"
                               />
                             </div>
                             <div className="space-y-1">
-                              <label className="font-mono text-[8px] text-[#52525b] uppercase tracking-widest">Atmosphere</label>
+                              <label className="font-mono text-[8px] text-zinc-500 uppercase tracking-widest">Atmosphere</label>
                               <input 
                                 type="text"
                                 value={frame.atmosphere || ""}
                                 onChange={(e) => updateStoryboardFrame(i, { atmosphere: e.target.value })}
                                 placeholder="Gritty, Dreamy..."
-                                className="w-full bg-transparent border-none p-0 text-[10px] text-[#e4e4e7] focus:ring-0"
+                                className="w-full bg-zinc-950 border border-zinc-800 px-2 py-1.5 text-[10px] text-zinc-300 focus:border-zinc-600 outline-none"
                               />
                             </div>
                           </div>
                           
-                          <div className="space-y-2 pt-4 border-t border-[rgba(39,39,42,0.5)]">
-                            <label className="font-mono text-[9px] text-[#52525b] uppercase tracking-widest">Director's Note</label>
+                          <div className="space-y-2 pt-4 border-t border-zinc-800">
+                            <label className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest">Director's Note</label>
                             <textarea 
                               value={frame.annotation}
                               onChange={(e) => updateStoryboardFrame(i, { annotation: e.target.value })}
                               placeholder="Camera moves, sound, text..."
-                              className="w-full bg-transparent border-none p-0 text-[10px] text-[#71717a] italic leading-relaxed focus:ring-0 resize-none h-12"
+                              className="w-full bg-zinc-950 border border-zinc-800 p-2 text-[10px] text-zinc-400 italic leading-relaxed focus:border-zinc-600 outline-none resize-none h-12"
                             />
                           </div>
                         </div>
