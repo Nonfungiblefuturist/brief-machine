@@ -210,8 +210,8 @@ export default function PromptEngine() {
                                 type="text"
                                 value={clickToAdFields.productUrl}
                                 onChange={(e) => setClickToAdFields({...clickToAdFields, productUrl: e.target.value})}
-                                placeholder="https://brand.com/product"
-                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-300 outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-600"
+                                placeholder="e.g. https://brand.com/product/winter-jacket"
+                                className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-300 outline-none focus:ring-2 focus:ring-[#FF3366]/20 focus:border-[#FF3366] transition-all placeholder:text-zinc-600"
                               />
                             </div>
                             <div className="space-y-3">
@@ -240,8 +240,8 @@ export default function PromptEngine() {
                             <textarea 
                               value={clickToAdFields.brandIntent}
                               onChange={(e) => setClickToAdFields({...clickToAdFields, brandIntent: e.target.value})}
-                              placeholder="What is the primary goal of this ad? (e.g. Drive sales for new winter collection)"
-                              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-300 outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-600 min-h-[80px] resize-none"
+                              placeholder="e.g. Drive sales for the new winter collection by highlighting durability and warmth."
+                              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-300 outline-none focus:ring-2 focus:ring-[#FF3366]/20 focus:border-[#FF3366] transition-all placeholder:text-zinc-600 min-h-[80px] resize-none"
                             />
                           </div>
 
@@ -250,8 +250,8 @@ export default function PromptEngine() {
                             <textarea 
                               value={clickToAdFields.visualAnchors}
                               onChange={(e) => setClickToAdFields({...clickToAdFields, visualAnchors: e.target.value})}
-                              placeholder="Key visual elements to maintain (e.g. Logo placement, specific product color)"
-                              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-300 outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-600 min-h-[80px] resize-none"
+                              placeholder="e.g. Keep the red logo visible in the top right, ensure the jacket's texture is prominent."
+                              className="w-full bg-zinc-950 border border-zinc-800 rounded-lg px-4 py-3 text-sm text-zinc-300 outline-none focus:ring-2 focus:ring-[#FF3366]/20 focus:border-[#FF3366] transition-all placeholder:text-zinc-600 min-h-[80px] resize-none"
                             />
                           </div>
                         </div>
@@ -319,8 +319,13 @@ export default function PromptEngine() {
                       type="text"
                       value={subject}
                       onChange={(e) => setSubject(e.target.value)}
-                      placeholder="e.g. A neon hologram of a cat driving at top speed"
-                      className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-500"
+                      placeholder="e.g. A neon hologram of a cat driving at top speed through a cyberpunk city"
+                      className={cn(
+                        "w-full bg-zinc-900/50 border rounded-lg p-3 text-sm outline-none transition-all placeholder:text-zinc-500",
+                        "border-zinc-800 focus:border-[#FF3366] focus:ring-2 focus:ring-[#FF3366]/20",
+                        "invalid:border-red-500/50 invalid:focus:border-red-500 invalid:focus:ring-red-500/20"
+                      )}
+                      required
                     />
                   </section>
                   <section>
@@ -328,8 +333,8 @@ export default function PromptEngine() {
                     <textarea
                       value={hookText}
                       onChange={(e) => setHookText(e.target.value)}
-                      placeholder="Select a concept framework above or type manually..."
-                      className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-500 min-h-[80px] resize-y"
+                      placeholder="e.g. Start with an extreme close-up of the cat's glowing eyes before zooming out."
+                      className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-[#FF3366]/20 focus:border-[#FF3366] transition-all placeholder:text-zinc-500 min-h-[80px] resize-y"
                     />
                   </section>
                 </div>
@@ -408,8 +413,8 @@ export default function PromptEngine() {
                     type="text"
                     value={extra}
                     onChange={(e) => setExtra(e.target.value)}
-                    placeholder="Constraints, dialogue, actions..."
-                    className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-sm focus:outline-none focus:border-[#FF3366]/50 transition-colors placeholder:text-zinc-500"
+                    placeholder="e.g. Keep the color palette restricted to neon pinks and deep blues. No dialogue."
+                    className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg p-3 text-sm outline-none focus:ring-2 focus:ring-[#FF3366]/20 focus:border-[#FF3366] transition-all placeholder:text-zinc-500"
                   />
                 </section>
 

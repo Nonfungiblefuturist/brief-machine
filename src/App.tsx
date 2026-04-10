@@ -405,65 +405,88 @@ const BriefMachineHistoryComponent = ({
   onSelect: (shot: BriefMachineShot) => void,
   onDelete: (id: string) => void
 }) => {
-  if (history.length === 0) {
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredHistory = history.filter(item => {
+    const query = searchQuery.toLowerCase();
     return (
-      <div className="py-12 flex flex-col items-center justify-center text-zinc-800 gap-4">
-        <History size={48} />
-        <p className="font-display italic text-xl">No history yet</p>
-      </div>
+      item.shot.subject.toLowerCase().includes(query) ||
+      item.shot.camera.toLowerCase().includes(query) ||
+      item.shot.lighting.toLowerCase().includes(query) ||
+      item.shot.style.toLowerCase().includes(query)
     );
-  }
+  });
 
   return (
     <div className="space-y-4">
-      {history.map(item => (
-        <div 
-          key={item.id}
-          className="bg-zinc-900/30 border border-zinc-800 hover:border-zinc-600 transition-all rounded-lg overflow-hidden group"
-        >
-          <div className="flex gap-4 p-4">
-            <div 
-              className="w-24 aspect-video bg-black border border-zinc-800 flex-shrink-0 cursor-pointer overflow-hidden"
-              onClick={() => onSelect(item.shot)}
-            >
-              {item.shot.imageUrl ? (
-                <img src={item.shot.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center">
-                  <Sparkles size={16} className="text-zinc-800" />
-                </div>
-              )}
-            </div>
-            <div className="flex-1 min-w-0 space-y-2">
-              <div className="flex justify-between items-start">
-                <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
-                  {new Date(item.timestamp).toLocaleString()}
-                </span>
-                <button 
-                  onClick={() => onDelete(item.id)}
-                  className="text-zinc-700 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-              <p className="text-[11px] text-zinc-300 line-clamp-2 font-medium leading-relaxed">
-                {item.shot.subject}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {item.shot.camera && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] text-zinc-500 font-mono uppercase tracking-widest rounded">{item.shot.camera}</span>}
-                {item.shot.lighting && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] text-zinc-500 font-mono uppercase tracking-widest rounded">{item.shot.lighting}</span>}
-                {item.shot.style && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] text-zinc-500 font-mono uppercase tracking-widest rounded">{item.shot.style}</span>}
-              </div>
-            </div>
-          </div>
-          <button 
-            onClick={() => onSelect(item.shot)}
-            className="w-full py-2 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-500 hover:text-white font-mono text-[9px] uppercase tracking-widest transition-all border-t border-zinc-800"
-          >
-            Restore Shot
-          </button>
+      <div className="relative">
+        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500" />
+        <input 
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search past prompts..."
+          className="w-full bg-zinc-900 border border-zinc-800 pl-9 pr-4 py-2 text-xs text-white focus:border-zinc-600 outline-none transition-all"
+        />
+      </div>
+
+      {filteredHistory.length === 0 ? (
+        <div className="py-12 flex flex-col items-center justify-center text-zinc-800 gap-4">
+          <History size={48} />
+          <p className="font-display italic text-xl">{history.length === 0 ? "No history yet" : "No results found"}</p>
         </div>
-      ))}
+      ) : (
+        <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+          {filteredHistory.map(item => (
+            <div 
+              key={item.id}
+              className="bg-zinc-900/30 border border-zinc-800 hover:border-zinc-600 transition-all rounded-lg overflow-hidden group"
+            >
+              <div className="flex gap-4 p-4">
+                <div 
+                  className="w-24 aspect-video bg-black border border-zinc-800 flex-shrink-0 cursor-pointer overflow-hidden"
+                  onClick={() => onSelect(item.shot)}
+                >
+                  {item.shot.imageUrl ? (
+                    <img src={item.shot.imageUrl} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Sparkles size={16} className="text-zinc-800" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 space-y-2">
+                  <div className="flex justify-between items-start">
+                    <span className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
+                      {new Date(item.timestamp).toLocaleString()}
+                    </span>
+                    <button 
+                      onClick={() => onDelete(item.id)}
+                      className="text-zinc-700 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-zinc-300 line-clamp-2 font-medium leading-relaxed">
+                    {item.shot.subject}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {item.shot.camera && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] text-zinc-500 font-mono uppercase tracking-widest rounded">{item.shot.camera}</span>}
+                    {item.shot.lighting && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] text-zinc-500 font-mono uppercase tracking-widest rounded">{item.shot.lighting}</span>}
+                    {item.shot.style && <span className="px-2 py-0.5 bg-zinc-800 text-[8px] text-zinc-500 font-mono uppercase tracking-widest rounded">{item.shot.style}</span>}
+                  </div>
+                </div>
+              </div>
+              <button 
+                onClick={() => onSelect(item.shot)}
+                className="w-full py-2 bg-zinc-900/50 hover:bg-zinc-800 text-zinc-500 hover:text-white font-mono text-[9px] uppercase tracking-widest transition-all border-t border-zinc-800"
+              >
+                Restore Shot
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 };
@@ -574,7 +597,20 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 export default function App() {
   const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
+  const [globalTheme, setGlobalTheme] = useState<"dark" | "light">(() => {
+    const saved = localStorage.getItem("anomaLab_global_theme");
+    return (saved === "light" || saved === "dark") ? saved : "dark";
+  });
   const [anomaLabTheme, setAnomaLabTheme] = useState<"dark" | "light" | "high-contrast">("dark");
+
+  useEffect(() => {
+    if (globalTheme === "light") {
+      document.documentElement.classList.add("light");
+    } else {
+      document.documentElement.classList.remove("light");
+    }
+    localStorage.setItem("anomaLab_global_theme", globalTheme);
+  }, [globalTheme]);
   const [briefInput, setBriefInput] = useState("");
   const [scriptInput, setScriptInput] = useState("");
   const [videoLength, setVideoLength] = useState<string>(":30s");
@@ -1818,7 +1854,7 @@ Think D&AD. Think Cannes.`,
     try {
       const contents: any[] = [
         `TASK: Generate a storyboard based on the following input. 
-        Determine the appropriate number of shots (between 4 and 12) to tell the story effectively.
+        CRITICAL INSTRUCTION: If the input script explicitly or implicitly specifies a number of shots, scenes, or frames, you MUST generate EXACTLY that number of frames. Do not add or remove frames. If no specific number is implied, determine the appropriate number of shots (between 4 and 12) to tell the story effectively.
         Also, provide a creative and concise project name for this storyboard.
         INPUT: ${storyboarderInput}
         
@@ -2609,6 +2645,13 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             </motion.div>
 
             <div className="flex items-center gap-4">
+              <button
+                onClick={() => setGlobalTheme(globalTheme === "dark" ? "light" : "dark")}
+                className="p-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all rounded-full"
+                title={`Switch to ${globalTheme === "dark" ? "light" : "dark"} mode`}
+              >
+                {globalTheme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
+              </button>
               {user ? (
                 <div className="flex items-center gap-4">
                   <div className="text-right hidden md:block">
@@ -4640,16 +4683,16 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     ))}
                   </div>
                   
-                  <div ref={storyboardRef} className="space-y-8 p-12 bg-[#000000] border border-[#27272a]">
-                    <div className="border-b border-[#27272a] pb-8 mb-8">
-                      <h2 className="font-display text-4xl text-[#ffffff] italic mb-2">{storyboarderProjectName}</h2>
+                  <div ref={storyboardRef} className="space-y-8 p-12 bg-black border border-zinc-800">
+                    <div className="border-b border-zinc-800 pb-8 mb-8">
+                      <h2 className="font-display text-4xl text-white italic mb-2">{storyboarderProjectName}</h2>
                       <div className="flex justify-between items-end">
-                        <p className="font-mono text-[10px] text-[#71717a] uppercase tracking-widest w-full">
+                        <p className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest w-full">
                           {storyboarderInput.slice(0, 200)}{storyboarderInput.length > 200 ? '...' : ''}
                         </p>
                         <div className="text-right">
-                          <p className="font-mono text-[10px] text-[#52525b] uppercase tracking-widest">Generated By</p>
-                          <p className="font-display text-lg text-[#ffffff] italic">Anoma Lab AI</p>
+                          <p className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Generated By</p>
+                          <p className="font-display text-lg text-white italic">Anoma Lab AI</p>
                         </div>
                       </div>
                     </div>
@@ -4664,18 +4707,18 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         transition={{ delay: i * 0.1 }}
                         className="space-y-4 group/frame"
                       >
-                        <div className="relative aspect-video bg-[#09090b] border border-[#27272a] overflow-hidden group">
+                        <div className="relative aspect-video bg-zinc-950 border border-zinc-800 overflow-hidden group">
                           {frame.visual_url ? (
                             <LazyImage src={frame.visual_url} alt={`Frame ${i+1}`} className="w-full h-full" />
                           ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-[rgba(24,24,27,0.5)]">
-                              <div className="text-[#27272a] font-mono text-[10px] uppercase tracking-widest">
+                            <div className="w-full h-full flex flex-col items-center justify-center gap-4 bg-zinc-900/50">
+                              <div className="text-zinc-800 font-mono text-[10px] uppercase tracking-widest">
                                 Frame 0{i+1}
                               </div>
                               <button
                                 onClick={() => generateIndividualFrame(i)}
                                 disabled={isGeneratingIndividualFrame === i || !frame.frame_description}
-                                className="px-4 py-2 bg-[rgba(255,255,255,0.05)] border border-[rgba(255,255,255,0.1)] text-[#71717a] font-mono text-[10px] uppercase tracking-widest hover:bg-[#ffffff] hover:text-[#000000] transition-all flex items-center gap-2"
+                                className="px-4 py-2 bg-white/5 border border-white/10 text-zinc-500 font-mono text-[10px] uppercase tracking-widest hover:bg-white hover:text-black transition-all flex items-center gap-2"
                                 data-html2canvas-ignore="true"
                               >
                                 {isGeneratingIndividualFrame === i ? <RefreshCcw size={10} className="animate-spin" /> : <Sparkles size={10} />}
@@ -4683,10 +4726,10 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                               </button>
                             </div>
                           )}
-                          <div className="absolute top-4 left-4 bg-[rgba(0,0,0,0.8)] px-3 py-1 font-mono text-xs text-[#ffffff] border border-[rgba(255,255,255,0.1)]">0{i+1}</div>
+                          <div className="absolute top-4 left-4 bg-black/80 px-3 py-1 font-mono text-xs text-white border border-white/10">0{i+1}</div>
                           
                           <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity" data-html2canvas-ignore="true">
-                            <label className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ffffff] hover:text-[#000000] transition-all cursor-pointer" title="Upload Image">
+                            <label className="bg-black/80 p-2 text-white border border-white/10 hover:bg-white hover:text-black transition-all cursor-pointer" title="Upload Image">
                               <Upload size={14} />
                               <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFrameImageUpload(i, e)} />
                             </label>
@@ -4694,7 +4737,7 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                               <>
                                 <button 
                                   onClick={() => setRefiningFrameIndex(refiningFrameIndex === i ? null : i)}
-                                  className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ffffff] hover:text-[#000000] transition-all"
+                                  className="bg-black/80 p-2 text-white border border-white/10 hover:bg-white hover:text-black transition-all"
                                   title="Refine Image"
                                 >
                                   <RefreshCcw size={14} className={isGeneratingIndividualFrame === i ? "animate-spin" : ""} />
@@ -4703,14 +4746,14 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                             )}
                             <button 
                               onClick={() => duplicateStoryboardFrame(i)}
-                              className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ffffff] hover:text-[#000000] transition-all"
+                              className="bg-black/80 p-2 text-white border border-white/10 hover:bg-white hover:text-black transition-all"
                               title="Duplicate Shot"
                             >
                               <Copy size={14} />
                             </button>
                             <button 
                               onClick={() => removeStoryboardFrame(i)}
-                              className="bg-[rgba(0,0,0,0.8)] p-2 text-[#ffffff] border border-[rgba(255,255,255,0.1)] hover:bg-[#ef4444] transition-all"
+                              className="bg-black/80 p-2 text-white border border-white/10 hover:bg-red-500 transition-all"
                               title="Remove Shot"
                             >
                               <X size={14} />
