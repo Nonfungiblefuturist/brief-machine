@@ -37,6 +37,8 @@ export default function AudioToVideo() {
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
 
   useEffect(() => {
     return () => {
@@ -111,8 +113,18 @@ export default function AudioToVideo() {
       if (!ctx) throw new Error("Could not initialize canvas context");
 
       // Setup audio
-      const audioContext = new AudioContext();
-      const source = audioContext.createMediaElementSource(audioRef.current);
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContext();
+      }
+      const audioContext = audioContextRef.current;
+      await audioContext.resume();
+
+      if (!sourceNodeRef.current) {
+        sourceNodeRef.current = audioContext.createMediaElementSource(audioRef.current);
+      }
+      const source = sourceNodeRef.current;
+      source.disconnect(); // Clear previous connections
+
       const destination = audioContext.createMediaStreamDestination();
       source.connect(destination);
       source.connect(audioContext.destination);
