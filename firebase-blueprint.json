@@ -24,12 +24,57 @@
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["userId", "name", "input", "frames", "createdAt", "updatedAt"]
+    },
+    "Character": {
+      "title": "Character",
+      "description": "A saved character profile with physical attributes and visual traits.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "appearance": {
+          "type": "object",
+          "properties": {
+            "gender": { "type": "string" },
+            "age": { "type": "string" },
+            "ethnicity": { "type": "string" },
+            "eyeColor": { "type": "string" },
+            "hairStyle": { "type": "string" },
+            "hairColor": { "type": "string" },
+            "facialHair": { "type": "string" },
+            "build": { "type": "string" }
+          }
+        },
+        "wardrobe": {
+          "type": "object",
+          "properties": {
+            "style": { "type": "string" },
+            "top": { "type": "string" },
+            "bottom": { "type": "string" },
+            "footwear": { "type": "string" }
+          }
+        },
+        "accessories": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "personality": { "type": "string" },
+        "fullPrompt": { "type": "string", "description": "The generated prompt for AI imaging." },
+        "imageUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "name", "createdAt", "updatedAt"]
     }
   },
   "firestore": {
     "/storyboards/{storyboardId}": {
       "schema": "StoryboardProject",
       "description": "Collection of saved storyboard projects."
+    },
+    "/characters/{characterId}": {
+      "schema": "Character",
+      "description": "Collection of saved character profiles."
     }
   }
 }

@@ -61,7 +61,8 @@ import {
   Eye,
   Star,
   Upload,
-  Palette
+  Palette,
+  Music
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import * as pdfjsLib from 'pdfjs-dist';
@@ -545,6 +546,7 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
 import { geminiService } from "./services/geminiService";
 import PromptEngine from "./components/PromptEngine";
 import AudioToVideo from "./components/AudioToVideo";
+import CharacterCreator from "./components/CharacterCreator";
 
 // --- Components ---
 
@@ -596,7 +598,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine" | "audioToVideo">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine" | "audioToVideo" | "characterCreator">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [globalTheme, setGlobalTheme] = useState<"dark" | "light">(() => {
     const saved = localStorage.getItem("anomaLab_global_theme");
@@ -636,6 +638,10 @@ export default function App() {
   const [storyboarderProjectName, setStoryboarderProjectName] = useState("Untitled Project");
   const [storyboarderImages, setStoryboarderImages] = useState<string[]>([]);
   const [storyboarderFrames, setStoryboarderFrames] = useState<StoryboardFrame[]>([]);
+  const [storyboarderAudioFile, setStoryboarderAudioFile] = useState<File | null>(null);
+  const [storyboarderAudioUrl, setStoryboarderAudioUrl] = useState<string | null>(null);
+  const [storyboarderAudioDuration, setStoryboarderAudioDuration] = useState<number>(0);
+  const storyboarderAudioRef = useRef<HTMLAudioElement>(null);
   const [isGeneratingStoryboarder, setIsGeneratingStoryboarder] = useState(false);
   const [isGeneratingIndividualFrame, setIsGeneratingIndividualFrame] = useState<number | null>(null);
   const [briefHistory, setBriefHistory] = useState<string[]>([]);
@@ -740,23 +746,40 @@ export default function App() {
     return () => clearInterval(draftTimer);
   }, [storyboarderFrames, storyboarderInput, storyboarderProjectName]);
 
-  // Load Storyboard Draft on Mount
+  // Load Storyboard Draft on View Change
   useEffect(() => {
-    const savedDraft = localStorage.getItem("storyboard_draft");
-    if (savedDraft && storyboarderFrames.length === 0 && !storyboarderInput.trim()) {
-      try {
-        const draft = JSON.parse(savedDraft);
-        // Only restore if it's relatively fresh (e.g., within 24 hours)
-        if (Date.now() - draft.timestamp < 86400000) {
-          setStoryboarderProjectName(draft.name);
-          setStoryboarderInput(draft.input);
-          setStoryboarderFrames(draft.frames);
+    if (view === "storyboarder") {
+      const savedDraft = localStorage.getItem("storyboard_draft");
+      if (savedDraft && storyboarderFrames.length === 0 && !storyboarderInput.trim()) {
+        try {
+          const draft = JSON.parse(savedDraft);
+          // Only restore if it's relatively fresh (e.g., within 24 hours)
+          if (Date.now() - draft.timestamp < 86400000) {
+            setStoryboarderProjectName(draft.name);
+            setStoryboarderInput(draft.input);
+            setStoryboarderFrames(draft.frames);
+          }
+        } catch (e) {
+          console.error("Failed to load storyboard draft:", e);
         }
-      } catch (e) {
-        console.error("Failed to load storyboard draft:", e);
       }
     }
-  }, []);
+  }, [view]);
+
+  const handleStoryboardAudioUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setStoryboarderAudioFile(file);
+      if (storyboarderAudioUrl) URL.revokeObjectURL(storyboarderAudioUrl);
+      setStoryboarderAudioUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const onAudioMetadataLoaded = () => {
+    if (storyboarderAudioRef.current) {
+      setStoryboarderAudioDuration(storyboarderAudioRef.current.duration);
+    }
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -796,7 +819,9 @@ export default function App() {
     const template = STORYBOARD_TEMPLATES.find(t => t.id === templateId);
     if (template) {
       setStoryboarderFrames(template.frames.map(f => ({ ...f })));
-      setStoryboarderProjectName(template.name);
+      if (storyboarderProjectName === "Untitled Project" || !storyboarderProjectName.trim()) {
+        setStoryboarderProjectName(template.name);
+      }
       setStoryboarderInput(`Template: ${template.name}\n${template.description}`);
     }
   };
@@ -1853,8 +1878,12 @@ Think D&AD. Think Cannes.`,
     setError(null);
     
     try {
+      const audioContext = storyboarderAudioDuration > 0 
+        ? `\nAUDIO CONTEXT: The total duration for this sequence should be approximately ${storyboarderAudioDuration.toFixed(1)} seconds based on the uploaded audio track. Adjust the number and pacing of frames accordingly.` 
+        : "";
+
       const contents: any[] = [
-        `TASK: Generate a storyboard based on the following input. 
+        `TASK: Generate a storyboard based on the following input.${audioContext}
         CRITICAL INSTRUCTION: If the input script explicitly or implicitly specifies a number of shots, scenes, or frames, you MUST generate EXACTLY that number of frames. Do not add or remove frames. If no specific number is implied, determine the appropriate number of shots (between 4 and 12) to tell the story effectively.
         Also, provide a creative and concise project name for this storyboard.
         INPUT: ${storyboarderInput}
@@ -2710,11 +2739,12 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 id: "studio_group", 
                 label: "Studio", 
                 icon: Layout, 
-                active: view === "storyboarder" || view === "extractor" || view === "audioToVideo",
+                active: view === "storyboarder" || view === "extractor" || view === "audioToVideo" || view === "characterCreator",
                 subItems: [
                   { id: "storyboarder", label: "Storyboard" },
                   { id: "extractor", label: "Extractor" },
-                  { id: "audioToVideo", label: "Audio Export" }
+                  { id: "audioToVideo", label: "Audio Export" },
+                  { id: "characterCreator", label: "Characters" }
                 ]
               },
               { 
@@ -4483,6 +4513,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               <PromptEngine />
             </motion.div>
           )}
+          {/* CHARACTER CREATOR VIEW */}
+          {view === "characterCreator" && (
+            <CharacterCreator />
+          )}
+
           {/* AUDIO TO VIDEO VIEW */}
           {view === "audioToVideo" && (
             <AudioToVideo />
@@ -4539,31 +4574,79 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     />
                   </div>
 
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-center">
-                      <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Reference Images (Optional)</label>
-                      <label className="cursor-pointer font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2">
-                        <Plus size={12} />
-                        Upload
-                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleStoryboardImageUpload} />
-                      </label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Reference Images (Optional)</label>
+                        <label className="cursor-pointer font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2">
+                          <Plus size={12} />
+                          Upload
+                          <input type="file" multiple accept="image/*" className="hidden" onChange={handleStoryboardImageUpload} />
+                        </label>
+                      </div>
+                      
+                      {storyboarderImages.length > 0 && (
+                        <div className="grid grid-cols-4 gap-4">
+                          {storyboarderImages.map((img, i) => (
+                            <div key={i} className="relative aspect-square bg-zinc-800 border border-zinc-700 group">
+                              <LazyImage src={img} alt={`Reference ${i}`} className="w-full h-full" />
+                              <button 
+                                onClick={() => setStoryboarderImages(prev => prev.filter((_, idx) => idx !== i))}
+                                className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X size={10} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    
-                    {storyboarderImages.length > 0 && (
-                      <div className="grid grid-cols-4 md:grid-cols-6 gap-4">
-                        {storyboarderImages.map((img, i) => (
-                          <div key={i} className="relative aspect-square bg-zinc-800 border border-zinc-700 group">
-                            <LazyImage src={img} alt={`Reference ${i}`} className="w-full h-full" />
+
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <label className="font-mono text-[10px] text-zinc-600 uppercase tracking-widest">Audio Track (Optional)</label>
+                        <label className="cursor-pointer font-mono text-[10px] uppercase tracking-widest px-4 py-2 border border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600 transition-all flex items-center gap-2">
+                          <Plus size={12} />
+                          Upload Audio
+                          <input type="file" accept="audio/*" className="hidden" onChange={handleStoryboardAudioUpload} />
+                        </label>
+                      </div>
+
+                      {storyboarderAudioUrl && (
+                        <div className="p-4 bg-zinc-950 border border-zinc-800 space-y-4">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-zinc-900 flex items-center justify-center text-white">
+                              <Music size={20} />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-mono text-[10px] text-white uppercase tracking-widest truncate">
+                                {storyboarderAudioFile?.name || "Uploaded Audio"}
+                              </p>
+                              <p className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
+                                {Math.floor(storyboarderAudioDuration / 60)}:{(storyboarderAudioDuration % 60).toFixed(0).padStart(2, '0')}
+                              </p>
+                            </div>
                             <button 
-                              onClick={() => setStoryboarderImages(prev => prev.filter((_, idx) => idx !== i))}
-                              className="absolute -top-2 -right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => {
+                                setStoryboarderAudioUrl(null);
+                                setStoryboarderAudioFile(null);
+                                setStoryboarderAudioDuration(0);
+                              }}
+                              className="text-zinc-700 hover:text-red-500 transition-all"
                             >
-                              <X size={10} />
+                              <X size={16} />
                             </button>
                           </div>
-                        ))}
-                      </div>
-                    )}
+                          <audio 
+                            ref={storyboarderAudioRef}
+                            src={storyboarderAudioUrl} 
+                            controls 
+                            onLoadedMetadata={onAudioMetadataLoaded}
+                            className="w-full h-8 accent-white" 
+                          />
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <button

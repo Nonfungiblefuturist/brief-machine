@@ -56,6 +56,14 @@ service cloud.firestore {
              data.createdAt is timestamp;
     }
 
+    function isValidCharacter(data) {
+      return data.keys().hasAll(['userId', 'name', 'createdAt', 'updatedAt']) &&
+             data.userId is string &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
     match /storyboards/{storyboardId} {
       allow read: if isAuthenticated() && isDocOwner();
       allow create: if isAuthenticated() && 
@@ -74,6 +82,19 @@ service cloud.firestore {
       allow create: if isAuthenticated() && 
                       isOwner(request.resource.data.userId) && 
                       isValidPastTrend(request.resource.data);
+      allow delete: if isAuthenticated() && isDocOwner();
+    }
+
+    match /characters/{characterId} {
+      allow read: if isAuthenticated() && isDocOwner();
+      allow create: if isAuthenticated() && 
+                      isOwner(request.resource.data.userId) && 
+                      isValidCharacter(request.resource.data);
+      allow update: if isAuthenticated() && 
+                      isDocOwner() && 
+                      isOwner(request.resource.data.userId) && 
+                      isValidCharacter(request.resource.data) &&
+                      request.resource.data.createdAt == resource.data.createdAt;
       allow delete: if isAuthenticated() && isDocOwner();
     }
     
