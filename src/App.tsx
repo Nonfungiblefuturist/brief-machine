@@ -544,6 +544,7 @@ const handleFirestoreError = (error: unknown, operationType: OperationType, path
 
 import { geminiService } from "./services/geminiService";
 import PromptEngine from "./components/PromptEngine";
+import AudioToVideo from "./components/AudioToVideo";
 
 // --- Components ---
 
@@ -595,7 +596,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine" | "audioToVideo">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [globalTheme, setGlobalTheme] = useState<"dark" | "light">(() => {
     const saved = localStorage.getItem("anomaLab_global_theme");
@@ -2709,10 +2710,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 id: "studio_group", 
                 label: "Studio", 
                 icon: Layout, 
-                active: view === "storyboarder" || view === "extractor",
+                active: view === "storyboarder" || view === "extractor" || view === "audioToVideo",
                 subItems: [
                   { id: "storyboarder", label: "Storyboard" },
-                  { id: "extractor", label: "Extractor" }
+                  { id: "extractor", label: "Extractor" },
+                  { id: "audioToVideo", label: "Audio Export" }
                 ]
               },
               { 
@@ -4481,6 +4483,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
               <PromptEngine />
             </motion.div>
           )}
+          {/* AUDIO TO VIDEO VIEW */}
+          {view === "audioToVideo" && (
+            <AudioToVideo />
+          )}
+
           {view === "storyboarder" && (
             <motion.div 
               initial={{ opacity: 0 }}
