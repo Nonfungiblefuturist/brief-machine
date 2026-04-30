@@ -547,6 +547,7 @@ import { geminiService } from "./services/geminiService";
 import PromptEngine from "./components/PromptEngine";
 import AudioToVideo from "./components/AudioToVideo";
 import CharacterCreator from "./components/CharacterCreator";
+import TextAdventure from "./components/TextAdventure";
 
 // --- Components ---
 
@@ -598,7 +599,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine" | "audioToVideo" | "characterCreator">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine" | "audioToVideo" | "characterCreator" | "adventure">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [globalTheme, setGlobalTheme] = useState<"dark" | "light">(() => {
     const saved = localStorage.getItem("anomaLab_global_theme");
@@ -2739,12 +2740,13 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                 id: "studio_group", 
                 label: "Studio", 
                 icon: Layout, 
-                active: view === "storyboarder" || view === "extractor" || view === "audioToVideo" || view === "characterCreator",
+                active: view === "storyboarder" || view === "extractor" || view === "audioToVideo" || view === "characterCreator" || view === "adventure",
                 subItems: [
                   { id: "storyboarder", label: "Storyboard" },
                   { id: "extractor", label: "Extractor" },
                   { id: "audioToVideo", label: "Audio Export" },
-                  { id: "characterCreator", label: "Characters" }
+                  { id: "characterCreator", label: "Characters" },
+                  { id: "adventure", label: "Adventure" }
                 ]
               },
               { 
@@ -4516,6 +4518,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
           {/* CHARACTER CREATOR VIEW */}
           {view === "characterCreator" && (
             <CharacterCreator />
+          )}
+
+          {/* ADVENTURE VIEW */}
+          {view === "adventure" && (
+            <TextAdventure />
           )}
 
           {/* AUDIO TO VIDEO VIEW */}
