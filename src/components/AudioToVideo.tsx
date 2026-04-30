@@ -25,6 +25,9 @@ export default function AudioToVideo() {
   const [exportComplete, setExportComplete] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duration, setDuration] = useState(0);
+  const [trimStart, setTrimStart] = useState(0);
+  const [trimEnd, setTrimEnd] = useState(0);
+  const [isTrimmed, setIsTrimmed] = useState(false);
   
   // Settings
   const [bgColor, setBgColor] = useState('#000000');
@@ -55,12 +58,36 @@ export default function AudioToVideo() {
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(URL.createObjectURL(file));
     setExportComplete(false);
+    setIsTrimmed(false);
+    setTrimStart(0);
+    setTrimEnd(0);
   };
 
   const onLoadedMetadata = () => {
     if (audioRef.current) {
-      setDuration(audioRef.current.duration);
+      const d = audioRef.current.duration;
+      setDuration(d);
+      setTrimEnd(d);
     }
+  };
+
+  const autoTrim15s = () => {
+    if (!audioRef.current) return;
+    const maxDuration = audioRef.current.duration;
+    
+    // Intelligent Trim: We'll take 15 seconds from the current position, 
+    // or from the start if we're near the end.
+    let start = audioRef.current.currentTime;
+    if (start + 15 > maxDuration) {
+      start = Math.max(0, maxDuration - 15);
+    }
+    
+    setTrimStart(start);
+    setTrimEnd(Math.min(start + 15, maxDuration));
+    setIsTrimmed(true);
+    
+    // Seek to start of trim
+    audioRef.current.currentTime = start;
   };
 
   const formatTime = (seconds: number) => {
@@ -129,8 +156,11 @@ export default function AudioToVideo() {
       };
 
       // Start recording
+      const effectiveStart = isTrimmed ? trimStart : 0;
+      const effectiveEnd = isTrimmed ? trimEnd : duration;
+      
       recorder.start();
-      audioRef.current.currentTime = 0;
+      audioRef.current.currentTime = effectiveStart;
       await audioRef.current.play();
       setIsPlaying(true);
 
@@ -152,10 +182,13 @@ export default function AudioToVideo() {
 
         // Progress
         if (audioRef.current) {
-          const progress = (audioRef.current.currentTime / audioRef.current.duration) * 100;
-          setExportProgress(progress);
+          const currentTime = audioRef.current.currentTime;
+          const totalToExport = effectiveEnd - effectiveStart;
+          const currentExported = currentTime - effectiveStart;
+          const progress = (currentExported / totalToExport) * 100;
+          setExportProgress(Math.min(100, Math.max(0, progress)));
 
-          if (audioRef.current.currentTime >= audioRef.current.duration) {
+          if (currentTime >= effectiveEnd) {
             recorder.stop();
             return;
           }
@@ -264,18 +297,65 @@ export default function AudioToVideo() {
                   </button>
                   
                   <div className="flex-1 space-y-2">
-                    <div className="h-1 w-full bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-1 w-full bg-zinc-800 rounded-full overflow-hidden relative">
+                      {isTrimmed && (
+                        <div 
+                          className="absolute h-full bg-white/20 border-x border-white/40"
+                          style={{ 
+                            left: `${(trimStart / duration) * 100}%`, 
+                            width: `${((trimEnd - trimStart) / duration) * 100}%` 
+                          }}
+                        />
+                      )}
                       <motion.div 
-                        className="h-full bg-white"
+                        className="h-full bg-white relative z-10"
                         animate={{ width: audioRef.current ? `${(audioRef.current.currentTime / duration) * 100}%` : '0%' }}
                         transition={{ duration: 0.1, ease: 'linear' }}
                       />
                     </div>
                     <div className="flex justify-between font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
                       <span>{audioRef.current ? formatTime(audioRef.current.currentTime) : "0:00"}</span>
-                      <span>{formatTime(duration)}</span>
+                      <div className="flex items-center gap-1 text-zinc-500">
+                        {isTrimmed && <Clock size={8} />}
+                        <span>{isTrimmed ? `TRIM: ${formatTime(trimEnd - trimStart)}` : formatTime(duration)}</span>
+                      </div>
                     </div>
                   </div>
+                </div>
+
+                <div className="mt-8 pt-8 border-t border-zinc-800 flex flex-wrap gap-4 items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={autoTrim15s}
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-2 font-mono text-[10px] uppercase tracking-widest border transition-all rounded",
+                        isTrimmed && (trimEnd - trimStart === 15 || Math.abs((trimEnd - trimStart) - 15) < 0.1)
+                          ? "bg-white text-black border-white"
+                          : "bg-zinc-900 text-white border-zinc-800 hover:border-zinc-600"
+                      )}
+                    >
+                      <Clock size={12} />
+                      Auto-Trim 15s
+                    </button>
+                    {isTrimmed && (
+                      <button
+                        onClick={() => {
+                          setIsTrimmed(false);
+                          setTrimStart(0);
+                          setTrimEnd(duration);
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 font-mono text-[10px] uppercase tracking-widest border border-red-500/30 text-red-400 hover:bg-red-500 hover:text-white transition-all rounded"
+                      >
+                        Reset
+                      </button>
+                    )}
+                  </div>
+                  
+                  {isTrimmed && (
+                    <p className="font-mono text-[9px] text-zinc-500 uppercase tracking-widest">
+                      Exporting from {formatTime(trimStart)} to {formatTime(trimEnd)}
+                    </p>
+                  )}
                 </div>
               </div>
 
