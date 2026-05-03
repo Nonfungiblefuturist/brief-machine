@@ -62,7 +62,10 @@ import {
   Star,
   Upload,
   Palette,
-  Music
+  Music,
+  User as UserIcon,
+  MessageSquare,
+  Users
 } from "lucide-react";
 import { cn } from "@/src/lib/utils";
 import * as pdfjsLib from 'pdfjs-dist';
@@ -295,6 +298,8 @@ interface SavedProject {
   createdAt: any;
   updatedAt: any;
   userId: string;
+  collaborators?: string[];
+  ownerId?: string;
 }
 
 interface Concept {
@@ -548,6 +553,8 @@ import PromptEngine from "./components/PromptEngine";
 import AudioToVideo from "./components/AudioToVideo";
 import CharacterCreator from "./components/CharacterCreator";
 import TextAdventure from "./components/TextAdventure";
+import UserProfile from "./components/UserProfile";
+import ProjectCollaboration from "./components/ProjectCollaboration";
 
 // --- Components ---
 
@@ -599,7 +606,7 @@ const RiskBadge = ({ level }: { level: 'safe' | 'brave' | 'dangerous' }) => {
 };
 
 export default function App() {
-  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine" | "audioToVideo" | "characterCreator" | "adventure">("input");
+  const [view, setView] = useState<"input" | "loading" | "results" | "trends" | "prompt" | "storyboarder" | "shortlist" | "compare" | "projects" | "extractor" | "pastTrends" | "anomaLab" | "promptEngine" | "audioToVideo" | "characterCreator" | "adventure" | "profile">("input");
   const [mode, setMode] = useState<"standard" | "surreal">("standard");
   const [globalTheme, setGlobalTheme] = useState<"dark" | "light">(() => {
     const saved = localStorage.getItem("anomaLab_global_theme");
@@ -639,6 +646,9 @@ export default function App() {
   const [storyboarderProjectName, setStoryboarderProjectName] = useState("Untitled Project");
   const [storyboarderImages, setStoryboarderImages] = useState<string[]>([]);
   const [storyboarderFrames, setStoryboarderFrames] = useState<StoryboardFrame[]>([]);
+  const [storyboarderCollaborators, setStoryboarderCollaborators] = useState<string[]>([]);
+  const [showStoryboardCollaboration, setShowStoryboardCollaboration] = useState(false);
+  const [currentStoryboardProjectId, setCurrentStoryboardProjectId] = useState<string | null>(null);
   const [storyboarderAudioFile, setStoryboarderAudioFile] = useState<File | null>(null);
   const [storyboarderAudioUrl, setStoryboarderAudioUrl] = useState<string | null>(null);
   const [storyboarderAudioDuration, setStoryboarderAudioDuration] = useState<number>(0);
@@ -1183,6 +1193,8 @@ export default function App() {
       };
 
       await setDoc(projectRef, projectData);
+      setCurrentStoryboardProjectId(projectId);
+      setStoryboarderCollaborators([]);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       fetchSavedProjects(user.uid);
@@ -1198,6 +1210,8 @@ export default function App() {
       setStoryboarderProjectName(project.name);
       setStoryboarderInput(project.input || "");
       setStoryboarderFrames(project.frames);
+      setCurrentStoryboardProjectId(project.id);
+      setStoryboarderCollaborators(project.collaborators || []);
       setView("storyboarder");
     } else if (project.prompts && project.prompts.length > 0) {
       setBriefMachineHistory(project.prompts);
@@ -2759,14 +2773,23 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   { id: "shortlist", label: "Shortlist" }
                 ]
               },
+              {
+                id: "profile_group",
+                label: "Account",
+                icon: UserIcon,
+                active: view === "profile",
+                subItems: [
+                  { id: "profile", label: "Profile" }
+                ]
+              }
             ].map((group) => (
               <div key={group.id} className="flex flex-col gap-2">
                 <button
-                  onClick={() => {
-                    const firstSub = group.subItems[0];
-                    if (firstSub.action) firstSub.action();
-                    else setView(firstSub.id as any);
-                  }}
+                    onClick={() => {
+                      const firstSub = group.subItems[0];
+                      if ('action' in firstSub && firstSub.action) (firstSub.action as any)();
+                      else setView(firstSub.id as any);
+                    }}
                   className={cn(
                     "font-mono text-[10px] uppercase tracking-widest px-6 py-3 border transition-all flex items-center gap-3",
                     group.active ? "bg-white text-black border-white" : "bg-transparent text-zinc-500 border-zinc-800 hover:border-zinc-600 hover:text-zinc-300"
@@ -4525,6 +4548,11 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
             <TextAdventure />
           )}
 
+          {/* PROFILE VIEW */}
+          {view === "profile" && (
+            <UserProfile />
+          )}
+
           {/* AUDIO TO VIDEO VIEW */}
           {view === "audioToVideo" && (
             <AudioToVideo />
@@ -4681,6 +4709,18 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                   <div className="flex justify-between items-center">
                     <h3 className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Visual Sequence</h3>
                     <div className="flex gap-2">
+                      {user && currentStoryboardProjectId && (
+                        <button 
+                          onClick={() => setShowStoryboardCollaboration(!showStoryboardCollaboration)}
+                          className={cn(
+                            "font-mono text-[10px] uppercase tracking-widest px-4 py-2 border transition-all flex items-center gap-2",
+                            showStoryboardCollaboration ? "bg-[#c87941] text-white border-[#c87941]" : "border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-600"
+                          )}
+                        >
+                          <MessageSquare size={12} />
+                          {showStoryboardCollaboration ? "Close Comms" : "Collaborate"}
+                        </button>
+                      )}
                       {user && (
                         <button 
                           onClick={() => saveProject('storyboard')}
@@ -4732,8 +4772,13 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                     </div>
                   </div>
 
-                  {/* Sequence Bar */}
-                  <div className="flex gap-2 overflow-x-auto pb-4 border-b border-zinc-800 mb-8 scrollbar-hide">
+                  <div className="flex flex-col lg:flex-row gap-8 items-start relative">
+                    <div className={cn(
+                      "flex-1 transition-all duration-500",
+                      showStoryboardCollaboration ? "lg:mr-[320px]" : "mr-0"
+                    )}>
+                      {/* Sequence Bar */}
+                      <div className="flex gap-2 overflow-x-auto pb-4 border-b border-zinc-800 mb-8 scrollbar-hide">
                     {storyboarderFrames.map((frame, i) => (
                       <div 
                         key={i}
@@ -4942,10 +4987,30 @@ Return as JSON matching the Concept schema (without visual_url, storyboard, etc.
                         </div>
                       </motion.div>
                     ))}
+                    </div>
                   </div>
                 </div>
+
+                {/* Collaboration Sidebar */}
+                <AnimatePresence>
+                  {showStoryboardCollaboration && currentStoryboardProjectId && (
+                    <motion.div 
+                      initial={{ x: 400, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: 400, opacity: 0 }}
+                      className="fixed lg:absolute top-0 right-0 w-full lg:w-[320px] h-full lg:h-[calc(100vh-200px)] z-50 lg:z-10"
+                    >
+                      <ProjectCollaboration 
+                        projectId={currentStoryboardProjectId}
+                        ownerId={user.uid}
+                        collaborators={storyboarderCollaborators}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-            )}
+            </div>
+          )}
 
             <div className="flex justify-center pt-8" data-html2canvas-ignore="true">
               <button 

@@ -20,6 +20,8 @@ import { cn } from '../lib/utils';
 
 // --- Types ---
 
+import { X } from 'lucide-react';
+
 type BackgroundType = 'noble' | 'rogue' | 'scholar';
 
 interface Character {
@@ -89,6 +91,33 @@ const WORLD_EVENTS: GameEvent[] = [
   }
 ];
 
+interface Achievement {
+  id: string;
+  title: string;
+  icon: React.ElementType;
+  description: string;
+  earned: boolean;
+}
+
+interface DifficultyMetrics {
+  riskScore: number; // Increases with aggressive/risky choices
+  resolutionScore: number; // Increases with successful resolutions
+  entropy: number; // 0 to 1, affects random event chances and choice complexity
+}
+
+interface GameProgress {
+  visitedScenes: Set<string>;
+  totalDecisions: number;
+  milestonesReached: string[];
+}
+
+const ACHIEVEMENTS: Achievement[] = [
+  { id: 'first_step', title: 'The Wanderer', icon: Compass, description: 'Took your first step into Oakhaven.', earned: false },
+  { id: 'bribe_master', title: 'The Negotiator', icon: Crown, description: 'Preferred the weight of gold over the law.', earned: false },
+  { id: 'lore_seeker', title: 'Archivist', icon: Scroll, description: 'Used your knowledge to bypass obstacles.', earned: false },
+  { id: 'survivalist', title: 'Survivor', icon: Shield, description: 'Navigated through a hazardous world event.', earned: false }
+];
+
 const TextAdventure = () => {
   const [gameState, setGameState] = useState<'setup' | 'playing'>('setup');
   const [character, setCharacter] = useState<Character>({
@@ -101,6 +130,21 @@ const TextAdventure = () => {
   const [currentPassage, setCurrentPassage] = useState<string>('');
   const [choices, setChoices] = useState<{ text: string; nextId: string }[]>([]);
   const [activeEvent, setActiveEvent] = useState<GameEvent | null>(null);
+  
+  // Progress & DDA States
+  const [progress, setProgress] = useState<GameProgress>({
+    visitedScenes: new Set(),
+    totalDecisions: 0,
+    milestonesReached: []
+  });
+  const [metrics, setMetrics] = useState<DifficultyMetrics>({
+    riskScore: 0,
+    resolutionScore: 0,
+    entropy: 0.1
+  });
+  const [achievements, setAchievements] = useState<Achievement[]>(ACHIEVEMENTS);
+  const [showProgress, setShowProgress] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll history
@@ -118,17 +162,59 @@ const TextAdventure = () => {
     
     setHistory([intro]);
     generateNextPassage('city_gates');
+    awardAchievement('first_step');
+  };
+
+  const awardAchievement = (id: string) => {
+    setAchievements(prev => prev.map(a => 
+      a.id === id && !a.earned ? { ...a, earned: true } : a
+    ));
+  };
+
+  const updateDDA = (choiceId: string) => {
+    setMetrics(prev => {
+      let newRisk = prev.riskScore;
+      let newResolution = prev.resolutionScore;
+
+      // Logic to adjust risk/resolution based on generic choice categories
+      if (choiceId === 'shadows' || choiceId === 'underground') newRisk += 10;
+      if (choiceId === 'scholar_entry') newResolution += 5;
+      
+      // Calculate entropy based on depth and scores
+      // Higher risk + more depth = higher entropy (more random events, harder scenarios)
+      const newEntropy = Math.min(0.9, 0.1 + (newRisk / 100) + (progress.totalDecisions / 50));
+
+      return {
+        riskScore: newRisk,
+        resolutionScore: newResolution,
+        entropy: newEntropy
+      };
+    });
   };
 
   const generateNextPassage = (sceneId: string) => {
-    // In a real app, this might call an AI or a complex branching logic.
-    // For this implementation, we'll simulate narrative branches.
+    // Progress tracking
+    setProgress(prev => ({
+      ...prev,
+      visitedScenes: new Set([...prev.visitedScenes, sceneId]),
+      totalDecisions: prev.totalDecisions + 1
+    }));
+
+    updateDDA(sceneId);
+
+    // Achievement logic for specific scene entries
+    if (sceneId === 'shadows') awardAchievement('bribe_master');
+    if (sceneId === 'scholar_entry') awardAchievement('lore_seeker');
+
+    // Dynamic Choice Scaling: Inject difficulty-based variations
+    const isHighEntropy = metrics.entropy > 0.5;
     
     let text = "";
     let nextChoices: { text: string; nextId: string }[] = [];
 
     if (sceneId === 'city_gates') {
       text = "The guard at the gate eyes you suspiciously. He recognizes your status as a " + character.background + ". 'Business or pleasure?' he grunts.";
+      if (isHighEntropy) text += " His hand rests restlessly on the pommel of his sword; the city is on edge.";
       nextChoices = [
         { text: "State your business firmly", nextId: 'tavern' },
         { text: "Slide a coin across the counter", nextId: 'shadows' },
@@ -157,9 +243,10 @@ const TextAdventure = () => {
     setCurrentPassage(text);
     setChoices(nextChoices);
 
-    // Random Event Check (20% chance)
-    if (Math.random() < 0.2) {
+    // Random Event Check (DDA scale)
+    if (Math.random() < (0.1 + metrics.entropy * 0.4)) {
       triggerRandomEvent();
+      awardAchievement('survivalist');
     }
   };
 
@@ -185,6 +272,17 @@ const TextAdventure = () => {
     setCurrentPassage('');
     setChoices([]);
     setActiveEvent(null);
+    setProgress({
+      visitedScenes: new Set(),
+      totalDecisions: 0,
+      milestonesReached: []
+    });
+    setMetrics({
+      riskScore: 0,
+      resolutionScore: 0,
+      entropy: 0.1
+    });
+    setAchievements(ACHIEVEMENTS);
   };
 
   return (
@@ -288,9 +386,21 @@ const TextAdventure = () => {
                 </div>
                 <div>
                   <h3 className="font-display text-white italic">{character.name}</h3>
-                  <p className="font-mono text-[8px] text-zinc-500 uppercase tracking-widest">
-                    {character.background} // {character.traits?.join(', ')}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono text-[8px] text-zinc-500 uppercase tracking-widest">
+                      {character.background} // {character.traits?.join(', ')}
+                    </p>
+                    <div className="h-1 w-1 rounded-full bg-zinc-800" />
+                    <button 
+                      onClick={() => setShowProgress(!showProgress)}
+                      className={cn(
+                        "font-mono text-[8px] uppercase tracking-widest transition-colors",
+                        showProgress ? "text-cyan-400" : "text-zinc-600 hover:text-white"
+                      )}
+                    >
+                      [View Progress]
+                    </button>
+                  </div>
                 </div>
               </div>
               <button 
@@ -301,6 +411,72 @@ const TextAdventure = () => {
                 <RefreshCcw size={14} />
               </button>
             </div>
+
+            {/* Progress / Map Overlay */}
+            <AnimatePresence>
+              {showProgress && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                  className="absolute inset-y-0 right-0 w-64 bg-zinc-950 border-l border-zinc-800 p-8 z-30 shadow-2xl space-y-8"
+                >
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">Chronicle Journey</h3>
+                    <button onClick={() => setShowProgress(false)}><X size={12} className="text-zinc-500" /></button>
+                  </div>
+
+                  <div className="space-y-6">
+                    {/* Scene Map */}
+                    <div className="space-y-3">
+                      <p className="font-mono text-[8px] text-zinc-700 uppercase tracking-tight italic">Visited Echoes</p>
+                      <div className="space-y-2">
+                        {Array.from(progress.visitedScenes).map(scene => (
+                          <div key={scene} className="flex items-center gap-3">
+                            <div className="w-1.5 h-1.5 rounded-full bg-cyan-500 shadow-[0_0_8px_rgba(34,211,238,0.5)]" />
+                            <span className="font-mono text-[10px] text-zinc-400 uppercase tracking-widest">{scene.replace('_', ' ')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* DDA Visualization */}
+                    <div className="space-y-3 pt-6 border-t border-zinc-900">
+                      <p className="font-mono text-[8px] text-zinc-700 uppercase tracking-tight italic">World Entropy</p>
+                      <div className="h-1.5 w-full bg-zinc-900 rounded-full overflow-hidden">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${metrics.entropy * 100}%` }}
+                          className="h-full bg-gradient-to-r from-cyan-500 to-purple-500"
+                        />
+                      </div>
+                      <p className="font-mono text-[8px] text-zinc-500 text-right uppercase">
+                        {metrics.entropy < 0.3 ? 'Stable' : metrics.entropy < 0.7 ? 'Fluctuating' : 'Critical'}
+                      </p>
+                    </div>
+
+                    {/* Achievements */}
+                    <div className="space-y-3 pt-6 border-t border-zinc-900">
+                      <p className="font-mono text-[8px] text-zinc-700 uppercase tracking-tight italic">Achievements</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {achievements.map((a) => (
+                          <div 
+                            key={a.id} 
+                            title={a.title + ': ' + a.description}
+                            className={cn(
+                              "p-2 border aspect-square flex items-center justify-center transition-all",
+                              a.earned ? "bg-cyan-500/10 border-cyan-500/50 text-cyan-400 shadow-lg" : "bg-zinc-900 border-zinc-800 text-zinc-700 opacity-30"
+                            )}
+                          >
+                            <a.icon size={12} />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* Narrative Area */}
             <div 
@@ -379,11 +555,12 @@ const TextAdventure = () => {
 
       {/* Narrative Stats / Meta */}
       {gameState === 'playing' && (
-        <div className="grid grid-cols-3 gap-8">
+        <div className="grid grid-cols-4 gap-8">
           {[
-            { label: 'Narrative Depth', value: 'Level 1', icon: Compass },
-            { label: 'Chronicle Words', value: history.length * 12, icon: MessageSquare },
-            { label: 'World Entropy', value: 'Low', icon: Zap }
+            { label: 'Narrative Depth', value: `Level ${Math.floor(progress.totalDecisions / 5) + 1}`, icon: Compass },
+            { label: 'Entropy Status', value: metrics.entropy < 0.4 ? 'Stable' : 'Unbound', icon: Zap },
+            { label: 'Achievements', value: `${achievements.filter(a => a.earned).length}/${achievements.length}`, icon: Star },
+            { label: 'Chronicle Score', value: metrics.riskScore + metrics.resolutionScore, icon: MessageSquare },
           ].map((stat, i) => (
             <div key={i} className="bg-zinc-900/30 border border-zinc-800 p-4 flex items-center gap-4">
               <stat.icon size={12} className="text-zinc-700" />
