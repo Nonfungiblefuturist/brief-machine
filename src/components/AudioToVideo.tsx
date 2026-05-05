@@ -34,6 +34,7 @@ export default function AudioToVideo() {
   const [resolution, setResolution] = useState<{w: number, h: number}>({ w: 1920, h: 1080 });
   const [fps, setFps] = useState(30);
   const [overlayText, setOverlayText] = useState("");
+  const [isAudioOnly, setIsAudioOnly] = useState(false);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -131,33 +132,59 @@ export default function AudioToVideo() {
 
       const combinedStream = new MediaStream();
       
-      // Get video track from canvas
-      const canvasStream = canvas.captureStream(fps);
-      canvasStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
-      
-      // Get audio track from destination
-      destination.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+      let mimeType = 'video/webm';
+      if (isAudioOnly) {
+        mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+          ? 'audio/webm;codecs=opus' 
+          : 'audio/webm';
+        destination.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
+      } else {
+        // Get video track from canvas
+        const canvasStream = canvas.captureStream(fps);
+        canvasStream.getVideoTracks().forEach(track => combinedStream.addTrack(track));
+        
+        // Get audio track from destination
+        destination.stream.getAudioTracks().forEach(track => combinedStream.addTrack(track));
 
-      const mimeType = MediaRecorder.isTypeSupported('video/mp4') 
-        ? 'video/mp4' 
-        : 'video/webm;codecs=vp9';
+        mimeType = MediaRecorder.isTypeSupported('video/mp4') 
+          ? 'video/mp4' 
+          : 'video/webm;codecs=vp9';
+      }
       
       const recorder = new MediaRecorder(combinedStream, {
         mimeType,
-        videoBitsPerSecond: 5000000 // 5Mbps
+        ...(isAudioOnly ? {} : { videoBitsPerSecond: 5000000 }) // 5Mbps for video
       });
 
       const chunks: Blob[] = [];
+      let totalSize = 0;
+      const SIZE_LIMIT = 400 * 1024 * 1024; // 400MB
+
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
+        if (e.data.size > 0) {
+          totalSize += e.data.size;
+          if (totalSize > SIZE_LIMIT) {
+            setError("File size exceeded 400MB limit. Export stopped.");
+            recorder.stop();
+            return;
+          }
+          chunks.push(e.data);
+        }
       };
 
       recorder.onstop = () => {
+        if (totalSize > SIZE_LIMIT) {
+          setIsExporting(false);
+          setIsPlaying(false);
+          audioRef.current?.pause();
+          return;
+        }
         const blob = new Blob(chunks, { type: mimeType });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `audio_export_${Date.now()}.${mimeType === 'video/mp4' ? 'mp4' : 'webm'}`;
+        const extension = isAudioOnly ? 'webm' : (mimeType === 'video/mp4' ? 'mp4' : 'webm');
+        a.download = `audio_export_${Date.now()}.${extension}`;
         a.click();
         URL.revokeObjectURL(url);
         setIsExporting(false);
@@ -411,8 +438,8 @@ export default function AudioToVideo() {
                   onClick={exportVideo}
                   className="w-full py-6 bg-[#FF3366] text-white font-mono text-sm uppercase tracking-[0.2em] hover:bg-[#E62E5C] transition-all flex items-center justify-center gap-3 rounded-2xl shadow-xl shadow-pink-900/20 active:scale-[0.98]"
                 >
-                  <Video size={18} />
-                  Generate MP4 for Export
+                  {isAudioOnly ? <Music size={18} /> : <Video size={18} />}
+                  {isAudioOnly ? "Extract Only Audio" : "Generate MP4 for Export"}
                 </button>
               )}
 
@@ -443,62 +470,87 @@ export default function AudioToVideo() {
 
             <div className="space-y-4">
               <div className="space-y-2">
-                <label className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Background Color</label>
-                <div className="flex gap-2">
-                  {['#000000', '#111111', '#1e1e1e', '#22c55e', '#3b82f6'].map(color => (
-                    <button
-                      key={color}
-                      onClick={() => setBgColor(color)}
-                      className={cn(
-                        "w-6 h-6 rounded-full border-2 transition-all",
-                        bgColor === color ? "border-white scale-110" : "border-transparent"
-                      )}
-                      style={{ backgroundColor: color }}
-                    />
-                  ))}
-                  <input 
-                    type="color" 
-                    value={bgColor} 
-                    onChange={(e) => setBgColor(e.target.value)}
-                    className="w-6 h-6 bg-transparent border-none p-0 cursor-pointer"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Resolution</label>
+                <label className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Extraction Mode</label>
                 <div className="grid grid-cols-2 gap-2">
                   {[
-                    { label: '1080p', w: 1920, h: 1080 },
-                    { label: 'Vertical', w: 1080, h: 1920 },
-                  ].map(res => (
+                    { label: 'Video (MP4)', value: false },
+                    { label: 'Audio Only', value: true },
+                  ].map(mode => (
                     <button
-                      key={res.label}
-                      onClick={() => setResolution({ w: res.w, h: res.h })}
+                      key={mode.label}
+                      onClick={() => setIsAudioOnly(mode.value)}
                       className={cn(
                         "font-mono text-[8px] uppercase tracking-widest py-2 border transition-all",
-                        resolution.w === res.w ? "bg-white text-black border-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600"
+                        isAudioOnly === mode.value ? "bg-white text-black border-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600"
                       )}
                     >
-                      {res.label}
+                      {mode.label}
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
-                  <Type size={10} />
-                  Overlay Text (Title Safe)
-                </div>
-                <input 
-                  type="text"
-                  value={overlayText}
-                  onChange={(e) => setOverlayText(e.target.value)}
-                  placeholder="Optional title overlay..."
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-[10px] font-mono text-zinc-400 outline-none focus:border-zinc-600 transition-colors"
-                />
-              </div>
+              {!isAudioOnly && (
+                <>
+                  <div className="space-y-2">
+                    <label className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Background Color</label>
+                    <div className="flex gap-2">
+                      {['#000000', '#111111', '#1e1e1e', '#22c55e', '#3b82f6'].map(color => (
+                        <button
+                          key={color}
+                          onClick={() => setBgColor(color)}
+                          className={cn(
+                            "w-6 h-6 rounded-full border-2 transition-all",
+                            bgColor === color ? "border-white scale-110" : "border-transparent"
+                          )}
+                          style={{ backgroundColor: color }}
+                        />
+                      ))}
+                      <input 
+                        type="color" 
+                        value={bgColor} 
+                        onChange={(e) => setBgColor(e.target.value)}
+                        className="w-6 h-6 bg-transparent border-none p-0 cursor-pointer"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="font-mono text-[8px] text-zinc-600 uppercase tracking-widest">Resolution</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { label: '1080p', w: 1920, h: 1080 },
+                        { label: 'Vertical', w: 1080, h: 1920 },
+                      ].map(res => (
+                        <button
+                          key={res.label}
+                          onClick={() => setResolution({ w: res.w, h: res.h })}
+                          className={cn(
+                            "font-mono text-[8px] uppercase tracking-widest py-2 border transition-all",
+                            resolution.w === res.w ? "bg-white text-black border-white" : "border-zinc-800 text-zinc-500 hover:border-zinc-600"
+                          )}
+                        >
+                          {res.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 font-mono text-[8px] text-zinc-600 uppercase tracking-widest">
+                      <Type size={10} />
+                      Overlay Text (Title Safe)
+                    </div>
+                    <input 
+                      type="text"
+                      value={overlayText}
+                      onChange={(e) => setOverlayText(e.target.value)}
+                      placeholder="Optional title overlay..."
+                      className="w-full bg-zinc-950 border border-zinc-800 rounded-lg p-3 text-[10px] font-mono text-zinc-400 outline-none focus:border-zinc-600 transition-colors"
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="pt-4 border-t border-zinc-800">
                 <div className="flex items-center gap-2 text-amber-500/70">
